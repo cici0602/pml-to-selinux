@@ -1,0 +1,13 @@
+# Basic SELinux policy example
+# Format: p, subject, object, action, class, effect
+
+# Allow user_t to read user home files
+p, user_t, /home/*/*, read, file, allow
+
+# Allow sshd_t to read and write to terminal
+p, sshd_t, /dev/pts/*, read, chr_file, allow
+p, sshd_t, /dev/pts/*, write, chr_file, allow
+
+# Allow kernel to access all files
+p, kernel_t, /*, read, file, allow
+p, kernel_t, /*, write, file, allow

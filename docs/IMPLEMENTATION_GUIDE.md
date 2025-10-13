@@ -1,0 +1,219 @@
+# 项目设置完成总结
+
+## 已完成的工作
+
+###  1. 设计文档
+- ✅ `/home/chris/opensource/casbin/pml-to-selinux/docs/设计文档.md` - 完整的设计文档
+- ✅ `/home/chris/opensource/casbin/pml-to-selinux/docs/coding-agent-prompt.md` - Coding Agent 提示词
+
+
+## 下一步开发任务
+
+###  Phase 1: 核心解析器实现 (优先级: 高)
+
+1. **实现 PML 解析器** (`compiler/parser.go`)
+   - [ ] 解析 `.conf` 模型文件
+   - [ ] 解析 `.csv` 策略文件
+   - [ ] 处理注释和空行
+   - [ ] 错误处理和行号追踪
+
+2. **实现语义分析器** (`compiler/analyzer.go`)
+   - [ ] 验证模型完整性
+   - [ ] 检查策略规则合法性
+   - [ ] 检测策略冲突
+   - [ ] 生成统计信息
+
+3. **单元测试**
+   - [ ] `parser_test.go` - 测试各种PML格式
+   - [ ] `analyzer_test.go` - 测试验证逻辑
+
+### Phase 2: SELinux 生成器 (优先级: 高)
+
+1. **路径模式映射** (`mapping/context_mapping.go`)
+   ```go
+   // 转换路径通配符
+   /var/www/*       →  /var/www(/.*)?
+   /etc/*.conf      →  /etc/[^/]+\.conf
+   ```
+
+2. **类型映射** (`mapping/type_mapping.go`)
+   ```go
+   // 从路径推断类型
+   /var/www/*       →  httpd_var_www_t
+   /var/log/httpd/* →  httpd_log_t
+   ```
+
+3. **.te 文件生成器** (`selinux/te_generator.go`)
+   ```go
+   func GenerateTE(policy *models.SELinuxPolicy) (string, error)
+   ```
+   输出格式:
+   ```selinux
+   policy_module(httpd, 1.0.0)
+   
+   type httpd_t;
+   type httpd_var_www_t;
+   
+   allow httpd_t httpd_var_www_t:file { read write };
+   ```
+
+4. **.fc 文件生成器** (`selinux/fc_generator.go`)
+   ```go
+   func GenerateFC(contexts []models.FileContext) (string, error)
+   ```
+   输出格式:
+   ```selinux
+   /var/www/html(/.*)?  gen_context(system_u:object_r:httpd_var_www_t,s0)
+   ```
+
+5. **策略优化器** (`compiler/optimizer.go`)
+   - [ ] 合并相同 source/target 的权限
+   - [ ] 去除重复规则
+   - [ ] 优化生成的策略大小
+
+### Phase 3: CLI 工具完善 (优先级: 中)
+
+1. **实现编译流程** (修改 `cli/main.go`)
+   ```go
+   func runCompile(cmd *cobra.Command, args []string) {
+       // 1. Parse
+       parser := compiler.NewParser(modelPath, policyPath)
+       pml, err := parser.Parse()
+       
+       // 2. Analyze
+       analyzer := compiler.NewAnalyzer(pml)
+       err = analyzer.Analyze()
+       
+       // 3. Generate
+       generator := compiler.NewGenerator(pml, moduleName)
+       selinuxPolicy, err := generator.Generate()
+       
+       // 4. Write files
+       err = selinux.WriteTE(outputDir, selinuxPolicy)
+       err = selinux.WriteFC(outputDir, selinuxPolicy)
+   }
+   ```
+
+2. **添加更多命令**
+   - [ ] `validate` - 仅验证 PML 文件
+   - [ ] `analyze` - 分析策略并显示统计
+   - [ ] `diff` - 比较两个策略的差异
+
+### Phase 4: 测试和文档 (优先级: 中)
+
+1. **集成测试**
+   - [ ] 端到端测试完整编译流程
+   - [ ] 测试生成的 SELinux 策略可以被 checkmodule 编译
+   - [ ] 测试各种边界情况
+
+2. **示例完善**
+   - [ ] 添加 Nginx 示例
+   - [ ] 添加 SSH 示例
+   - [ ] 添加复杂 RBAC 示例
+
+3. **文档**
+   - [ ] API 文档
+   - [ ] 用户手册
+   - [ ] 开发者指南
+
+## 快速启动指南
+
+### 1. 初始化Go模块
+```bash
+cd /home/chris/opensource/casbin/pml-to-selinux
+go mod tidy
+```
+
+### 2. 运行示例CLI
+```bash
+go run cli/main.go compile \
+  -m examples/httpd/httpd_model.conf \
+  -p examples/httpd/httpd_policy.csv \
+  -o output/
+```
+
+### 3. 运行测试
+```bash
+go test ./...
+```
+
+## 开发建议
+
+### 迭代开发策略
+1. **先实现最简单的场景**
+   - 只支持 allow 规则
+   - 只支持 file class
+   - 路径不包含通配符
+
+2. **逐步增加复杂度**
+   - 添加路径通配符支持
+   - 添加多种 object class
+   - 添加 deny 规则支持
+   - 添加 RBAC 支持
+
+3. **测试驱动开发**
+   - 先写测试，定义预期行为
+   - 实现功能使测试通过
+   - 重构优化代码
+
+### 代码示例模板
+
+**解析器测试** (`compiler/parser_test.go`):
+```go
+func TestParseModel(t *testing.T) {
+    parser := NewParser("testdata/test_model.conf", "testdata/test_policy.csv")
+    pml, err := parser.Parse()
+    
+    assert.NoError(t, err)
+    assert.NotNil(t, pml.Model)
+    assert.Equal(t, 4, len(pml.Model.RequestDefinition["r"]))
+}
+```
+
+**生成器测试** (`selinux/te_generator_test.go`):
+```go
+func TestGenerateTE(t *testing.T) {
+    policy := &models.SELinuxPolicy{
+        ModuleName: "httpd",
+        Version: "1.0.0",
+        Types: []models.TypeDeclaration{
+            {TypeName: "httpd_t"},
+        },
+    }
+    
+    te, err := GenerateTE(policy)
+    
+    assert.NoError(t, err)
+    assert.Contains(t, te, "policy_module(httpd, 1.0.0)")
+    assert.Contains(t, te, "type httpd_t;")
+}
+```
+
+## 工具和资源
+
+### 开发工具
+- Go 1.21+
+- VS Code with Go extension
+- SELinux tools (checkmodule, semodule_package)
+
+### 参考资源
+1. **Casbin 文档**: https://casbin.org/docs/
+2. **SELinux 策略语言**: https://selinuxproject.org/page/PolicyLanguage
+3. **Go Testing**: https://golang.org/pkg/testing/
+4. **Cobra CLI**: https://github.com/spf13/cobra
+
+### 有用的 SELinux 命令
+```bash
+# 检查策略语法
+checkmodule -M -m -o policy.mod policy.te
+
+# 打包策略
+semodule_package -o policy.pp -m policy.mod -fc policy.fc
+
+# 查看已安装的策略
+semodule -l
+
+# 查看 file context
+semanage fcontext -l | grep httpd
+```
+
