@@ -331,16 +331,3 @@ g2, httpd_t, web_domain
 2. 冲突检测基于简单的路径重叠逻辑
 3. 暂不支持动态策略加载
 
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 许可证
-
-参见项目根目录的 LICENSE 文件。
-
-## 相关文档
-
-- [设计文档](../docs/设计文档.md)
-- [实现指南](../docs/IMPLEMENTATION_GUIDE.md)
-- [Phase 1 完成报告](../docs/PHASE1_COMPLETION_REPORT.md)
