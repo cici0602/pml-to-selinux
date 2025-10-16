@@ -9,7 +9,7 @@ import (
 type ActionMapper struct {
 	// Custom action mappings (action -> class:permissions)
 	customMappings map[string]ActionPermission
-	
+
 	// Default action mappings
 	defaultMappings map[string]ActionPermission
 }
@@ -77,7 +77,7 @@ func getDefaultActionMappings() map[string]ActionPermission {
 			Class:       "file",
 			Permissions: []string{"unlink"},
 		},
-		
+
 		// Directory operations
 		"search": {
 			Class:       "dir",
@@ -99,7 +99,7 @@ func getDefaultActionMappings() map[string]ActionPermission {
 			Class:       "dir",
 			Permissions: []string{"rmdir", "write"},
 		},
-		
+
 		// Network operations
 		"bind": {
 			Class:       "tcp_socket",
@@ -125,7 +125,7 @@ func getDefaultActionMappings() map[string]ActionPermission {
 			Class:       "tcp_socket",
 			Permissions: []string{"recv"},
 		},
-		
+
 		// Process operations
 		"signal": {
 			Class:       "process",
@@ -169,7 +169,7 @@ func (am *ActionMapper) AddCustomMapping(action string, class string, permission
 // MapAction maps a PML action to SELinux class and permissions
 func (am *ActionMapper) MapAction(action string, objectClass string) (string, []string) {
 	actionLower := strings.ToLower(action)
-	
+
 	// Check custom mappings first
 	if perm, ok := am.customMappings[actionLower]; ok {
 		// If object class is provided and different, use it
@@ -178,7 +178,7 @@ func (am *ActionMapper) MapAction(action string, objectClass string) (string, []
 		}
 		return perm.Class, perm.Permissions
 	}
-	
+
 	// Check default mappings
 	if perm, ok := am.defaultMappings[actionLower]; ok {
 		// If object class is provided and different, use it
@@ -188,7 +188,7 @@ func (am *ActionMapper) MapAction(action string, objectClass string) (string, []
 		}
 		return perm.Class, perm.Permissions
 	}
-	
+
 	// If not found, return as-is with provided or default class
 	if objectClass == "" {
 		objectClass = "file" // default class
@@ -217,7 +217,7 @@ func (am *ActionMapper) adaptPermissionsToClass(permissions []string, class stri
 		}
 		return removeDuplicatesStrings(adapted)
 	}
-	
+
 	return permissions
 }
 
@@ -230,17 +230,17 @@ func (am *ActionMapper) MapActionWithClass(action string, class string) []string
 // GetSupportedActions returns a list of all supported actions
 func (am *ActionMapper) GetSupportedActions() []string {
 	actions := []string{}
-	
+
 	for action := range am.defaultMappings {
 		actions = append(actions, action)
 	}
-	
+
 	for action := range am.customMappings {
 		if !containsString(actions, action) {
 			actions = append(actions, action)
 		}
 	}
-	
+
 	return actions
 }
 
@@ -248,21 +248,21 @@ func (am *ActionMapper) GetSupportedActions() []string {
 func (am *ActionMapper) GetSupportedClasses() []string {
 	classes := []string{}
 	seen := make(map[string]bool)
-	
+
 	for _, perm := range am.defaultMappings {
 		if !seen[perm.Class] {
 			classes = append(classes, perm.Class)
 			seen[perm.Class] = true
 		}
 	}
-	
+
 	for _, perm := range am.customMappings {
 		if !seen[perm.Class] {
 			classes = append(classes, perm.Class)
 			seen[perm.Class] = true
 		}
 	}
-	
+
 	return classes
 }
 
@@ -270,7 +270,7 @@ func (am *ActionMapper) GetSupportedClasses() []string {
 // For example: "rw" -> ["read", "write"]
 func (am *ActionMapper) ExpandActionSet(actionSet string) []string {
 	actions := []string{}
-	
+
 	// Handle compound actions
 	switch strings.ToLower(actionSet) {
 	case "rw", "read_write":
@@ -289,12 +289,12 @@ func (am *ActionMapper) ExpandActionSet(actionSet string) []string {
 			actions = []string{actionSet}
 		}
 	}
-	
+
 	// Trim spaces
 	for i, action := range actions {
 		actions[i] = strings.TrimSpace(action)
 	}
-	
+
 	return actions
 }
 
@@ -315,17 +315,17 @@ func (am *ActionMapper) LoadCustomMappingsFromConfig(config map[string]ActionPer
 // ExportMappings exports all mappings for configuration
 func (am *ActionMapper) ExportMappings() map[string]ActionPermission {
 	exported := make(map[string]ActionPermission)
-	
+
 	// Copy default mappings
 	for k, v := range am.defaultMappings {
 		exported[k] = v
 	}
-	
+
 	// Override with custom mappings
 	for k, v := range am.customMappings {
 		exported[k] = v
 	}
-	
+
 	return exported
 }
 
@@ -334,15 +334,15 @@ func (am *ActionMapper) ValidateMapping(action string, class string, permissions
 	if action == "" {
 		return fmt.Errorf("action cannot be empty")
 	}
-	
+
 	if class == "" {
 		return fmt.Errorf("class cannot be empty")
 	}
-	
+
 	if len(permissions) == 0 {
 		return fmt.Errorf("permissions cannot be empty")
 	}
-	
+
 	return nil
 }
 
@@ -351,14 +351,14 @@ func (am *ActionMapper) ValidateMapping(action string, class string, permissions
 func removeDuplicatesStrings(slice []string) []string {
 	seen := make(map[string]bool)
 	result := []string{}
-	
+
 	for _, item := range slice {
 		if !seen[item] {
 			seen[item] = true
 			result = append(result, item)
 		}
 	}
-	
+
 	return result
 }
 

@@ -165,7 +165,7 @@ func (g *Generator) convertTransitions(policy *models.SELinuxPolicy) error {
 		g.ensureType(policy, trans.SourceType)
 		g.ensureType(policy, trans.TargetType)
 		g.ensureType(policy, trans.NewType)
-		
+
 		// Generate domain transition helper rules if class is process
 		if trans.Class == "process" {
 			g.generateDomainTransitionRules(policy, trans.SourceType, trans.TargetType, trans.NewType)
@@ -184,7 +184,7 @@ func (g *Generator) generateDomainTransitionRules(policy *models.SELinuxPolicy, 
 		Class:       "file",
 		Permissions: []string{"execute", "read", "open", "getattr"},
 	})
-	
+
 	// Rule 2: Source domain can transition to target domain
 	policy.Rules = append(policy.Rules, models.AllowRule{
 		SourceType:  sourceType,
@@ -192,7 +192,7 @@ func (g *Generator) generateDomainTransitionRules(policy *models.SELinuxPolicy, 
 		Class:       "process",
 		Permissions: []string{"transition"},
 	})
-	
+
 	// Rule 3: Target domain entry point is the executable
 	policy.Rules = append(policy.Rules, models.AllowRule{
 		SourceType:  targetType,
@@ -200,7 +200,7 @@ func (g *Generator) generateDomainTransitionRules(policy *models.SELinuxPolicy, 
 		Class:       "file",
 		Permissions: []string{"entrypoint"},
 	})
-	
+
 	// Mark executable type with exec_type attribute if not already present
 	for i, typeDecl := range policy.Types {
 		if typeDecl.TypeName == execType {

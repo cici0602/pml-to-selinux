@@ -93,10 +93,10 @@ func TestGenerator_ActionToPermissions(t *testing.T) {
 	gen := NewGenerator(pml, "test")
 
 	tests := []struct {
-		name              string
-		action            string
-		expectedClass     string
-		expectedPermsMin  int // Minimum expected permissions
+		name             string
+		action           string
+		expectedClass    string
+		expectedPermsMin int // Minimum expected permissions
 	}{
 		{
 			name:             "read",

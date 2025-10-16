@@ -93,12 +93,12 @@ func (pm *PathMapper) IsDirectoryPattern(path string) bool {
 	if strings.HasSuffix(path, "/") {
 		return true
 	}
-	
+
 	// Ends with /* likely refers to directory contents
 	if strings.HasSuffix(path, "/*") {
 		return true
 	}
-	
+
 	// Common directory paths without wildcards
 	dirPaths := []string{"/bin", "/sbin", "/lib", "/lib64", "/etc", "/var", "/usr", "/opt", "/srv", "/home"}
 	for _, dirPath := range dirPaths {
@@ -106,7 +106,7 @@ func (pm *PathMapper) IsDirectoryPattern(path string) bool {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -122,7 +122,7 @@ func (pm *PathMapper) IsRecursivePattern(path string) bool {
 // This allows SELinux to match the directory and all its contents recursively
 func (pm *PathMapper) GenerateRecursivePatterns(path string) []PathPattern {
 	patterns := []PathPattern{}
-	
+
 	if !pm.IsRecursivePattern(path) {
 		// Not recursive, return single pattern
 		sePattern := pm.ConvertToSELinuxPattern(path)
@@ -132,17 +132,17 @@ func (pm *PathMapper) GenerateRecursivePatterns(path string) []PathPattern {
 		})
 		return patterns
 	}
-	
+
 	// Extract base path
 	basePath := ExtractBasePath(path)
 	escapedBase := escapeRegexChars(basePath)
-	
+
 	// Pattern for all files and subdirectories: /base(/.*)?
 	patterns = append(patterns, PathPattern{
-		Pattern:  escapedBase + "(/.*)?" ,
+		Pattern:  escapedBase + "(/.*)?",
 		FileType: "all files",
 	})
-	
+
 	return patterns
 }
 
