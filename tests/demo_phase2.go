@@ -13,7 +13,8 @@ import (
 )
 
 func main() {
-	fmt.Println("=== PML to SELinux Phase 2 Demo ===\n")
+	fmt.Println("=== PML to SELinux Phase 2 Demo ===")
+	fmt.Println()
 
 	// Get the examples directory
 	examplesDir := "../examples/httpd"

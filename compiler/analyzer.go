@@ -10,9 +10,10 @@ import (
 
 // Analyzer performs semantic analysis on parsed PML
 type Analyzer struct {
-	pml    *models.ParsedPML
-	errors []error
-	stats  *AnalysisStats
+	pml       *models.ParsedPML
+	errors    []error
+	stats     *AnalysisStats
+	conflicts []ConflictInfo
 }
 
 // AnalysisStats contains statistics about the analyzed policy
@@ -63,11 +64,11 @@ func (a *Analyzer) Analyze() error {
 	}
 
 	// Detect policy conflicts
-	conflicts := a.detectConflicts()
-	if len(conflicts) > 0 {
-		a.stats.Conflicts = len(conflicts)
+	a.conflicts = a.detectConflicts()
+	if len(a.conflicts) > 0 {
+		a.stats.Conflicts = len(a.conflicts)
 		// Log conflicts as warnings, not errors
-		for _, conflict := range conflicts {
+		for _, conflict := range a.conflicts {
 			a.addWarning(fmt.Sprintf("Policy conflict detected: %s", conflict.Reason))
 		}
 	}
@@ -318,6 +319,11 @@ func (a *Analyzer) generateStats() {
 // GetStats returns the analysis statistics
 func (a *Analyzer) GetStats() *AnalysisStats {
 	return a.stats
+}
+
+// GetConflicts returns detected policy conflicts
+func (a *Analyzer) GetConflicts() []ConflictInfo {
+	return a.conflicts
 }
 
 // addWarning adds a warning message (non-fatal)

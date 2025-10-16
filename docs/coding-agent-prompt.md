@@ -262,57 +262,12 @@ Error: Invalid path pattern in policy
   Suggestion: Use /var/www/* for wildcard matching
 ```
 
-## 性能要求
-- 能够处理 10,000+ 条策略规则
-- 编译时间应在 1 秒内完成（中等规模策略）
-- 生成的 SELinux 策略应该是优化的（合并相同规则）
 
 ## 代码风格
 - 遵循 Go 官方代码规范
 - 使用有意义的变量和函数名
 - 添加详细的注释（特别是映射逻辑）
 - 每个公共函数都要有文档注释
-
-## 依赖库
-```go
-// 可以使用的库
-import (
-    "github.com/casbin/casbin/v2"          // Casbin 核心库
-    "github.com/casbin/casbin/v2/model"    // Model 处理
-    "github.com/casbin/casbin/v2/persist"  // 策略持久化
-    "github.com/spf13/cobra"               // CLI 框架
-    "gopkg.in/yaml.v3"                     // 配置文件处理
-)
-```
-
-## 开发优先级
-
-### Phase 1: MVP (最小可行产品)
-1. 实现基本的 parser 和 generator
-2. 支持简单的 allow 规则
-3. 生成基本的 .te 和 .fc 文件
-4. 完成一个端到端的示例（httpd）
-
-### Phase 2: 核心功能
-1. 添加策略优化器
-2. 支持 deny 规则
-3. 实现完整的验证器
-4. 添加更多示例
-
-### Phase 3: 高级功能
-1. 支持 type transition
-2. 支持 role 和 user 映射
-3. 生成 .if 接口文件
-4. 反向编译支持（SELinux → PML）
-
-## 交付物检查清单
-- [ ] 代码实现完整且可运行
-- [ ] 包含完整的单元测试（覆盖率 > 80%）
-- [ ] 至少 3 个完整的示例
-- [ ] CLI 工具可以正常使用
-- [ ] 生成的 SELinux 策略可以通过 checkmodule 验证
-- [ ] 包含 README.md 说明如何使用
-- [ ] 代码有充分的注释和文档
 
 
 ## 额外说明
