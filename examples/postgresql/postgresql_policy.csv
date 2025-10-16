@@ -1,0 +1,10 @@
+postgresql_t,/var/lib/postgresql/data/*,read,allow
+postgresql_t,/var/lib/postgresql/data/*,write,allow
+postgresql_t,/var/lib/postgresql/data/*,create,allow
+postgresql_t,/var/log/postgresql/*,write,allow
+postgresql_t,/var/log/postgresql/*,append,allow
+postgresql_t,/etc/postgresql/*,read,allow
+postgresql_t,/var/run/postgresql/*,write,allow
+postgresql_t,/var/run/postgresql/*,create,allow
+postgresql_t,/tmp/postgresql/*,write,allow
+postgresql_t,/tmp/postgresql/*,unlink,allow

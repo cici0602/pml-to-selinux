@@ -1,0 +1,9 @@
+nginx_t,/var/www/html/*,read,allow
+nginx_t,/var/www/html/*,getattr,allow
+nginx_t,/var/log/nginx/*,write,allow
+nginx_t,/var/log/nginx/*,create,allow
+nginx_t,/etc/nginx/*,read,allow
+nginx_t,/var/run/nginx.pid,write,allow
+nginx_t,/var/cache/nginx/*,write,allow
+nginx_t,/var/cache/nginx/*,create,allow
+nginx_t,/usr/share/nginx/*,read,allow
