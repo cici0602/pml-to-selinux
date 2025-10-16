@@ -87,6 +87,71 @@ func escapeRegexCharsPreservingWildcards(s string) string {
 	return result
 }
 
+// IsDirectoryPattern checks if a path pattern represents a directory
+func (pm *PathMapper) IsDirectoryPattern(path string) bool {
+	// Ends with / indicates directory
+	if strings.HasSuffix(path, "/") {
+		return true
+	}
+	
+	// Ends with /* likely refers to directory contents
+	if strings.HasSuffix(path, "/*") {
+		return true
+	}
+	
+	// Common directory paths without wildcards
+	dirPaths := []string{"/bin", "/sbin", "/lib", "/lib64", "/etc", "/var", "/usr", "/opt", "/srv", "/home"}
+	for _, dirPath := range dirPaths {
+		if path == dirPath {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// IsRecursivePattern checks if a path pattern should match recursively
+func (pm *PathMapper) IsRecursivePattern(path string) bool {
+	// /path/to/dir/* is recursive
+	return strings.HasSuffix(path, "/*")
+}
+
+// GenerateRecursivePatterns generates both directory and file patterns for recursive matching
+// For a path like /var/www/*, it generates:
+// - /var/www(/.*)? for all files and subdirectories
+// This allows SELinux to match the directory and all its contents recursively
+func (pm *PathMapper) GenerateRecursivePatterns(path string) []PathPattern {
+	patterns := []PathPattern{}
+	
+	if !pm.IsRecursivePattern(path) {
+		// Not recursive, return single pattern
+		sePattern := pm.ConvertToSELinuxPattern(path)
+		patterns = append(patterns, PathPattern{
+			Pattern:  sePattern,
+			FileType: pm.InferFileType(path),
+		})
+		return patterns
+	}
+	
+	// Extract base path
+	basePath := ExtractBasePath(path)
+	escapedBase := escapeRegexChars(basePath)
+	
+	// Pattern for all files and subdirectories: /base(/.*)?
+	patterns = append(patterns, PathPattern{
+		Pattern:  escapedBase + "(/.*)?" ,
+		FileType: "all files",
+	})
+	
+	return patterns
+}
+
+// PathPattern represents a SELinux file context pattern with its file type
+type PathPattern struct {
+	Pattern  string // SELinux regex pattern
+	FileType string // File type (directory, regular file, etc.)
+}
+
 // InferFileType infers the SELinux file type specification from the path
 // Returns one of: "regular file", "directory", "symlink", "socket", "pipe", "block", "char"
 func (pm *PathMapper) InferFileType(path string) string {

@@ -15,6 +15,10 @@
 - ✅ 支持角色关系和类型转换
 - ✅ 命令行工具和多种操作模式
 - ✅ Docker 容器化支持
+- ✅ **新增**: 目录递归支持 (`/path/*` → `/path(/.*)?`)
+- ✅ **新增**: 角色映射和继承 (`g, member, role`)
+- ✅ **新增**: 域转换规则自动生成 (`t, source, target, class, new_type`)
+- ✅ **新增**: 可配置的动作映射表 (支持自定义动作映射)
 
 ## 快速开始
 
@@ -97,7 +101,80 @@ allow httpd_t httpd_var_log_httpd_t:file { write create };
 /var/log/httpd(/.*)?   gen_context(system_u:object_r:httpd_var_log_httpd_t,s0)
 ```
 
-更多示例见 [examples/](examples/) 目录。
+More examples at [examples/](examples/) directory.
+
+## 第二阶段新功能
+
+### 目录递归支持
+
+PML 策略中的 `/path/*` 模式会自动转换为 SELinux 的递归模式 `/path(/.*)?`：
+
+**PML 输入**:
+```csv
+p, httpd_t, /var/www/*, read, file, allow
+```
+
+**SELinux 输出**:
+```selinux
+# .te 文件
+allow httpd_t httpd_var_www_t:file { read open getattr };
+
+# .fc 文件  
+/var/www(/.*)?    gen_context(system_u:object_r:httpd_var_www_t,s0)
+```
+
+### 角色映射
+
+支持 PML 角色关系映射到 SELinux 角色：
+
+**PML 输入**:
+```csv
+g, webapp_user, webapp_staff
+g, webapp_staff, webapp_admin
+```
+
+**SELinux 输出**:
+```selinux
+allow webapp_user_r webapp_staff_r;
+allow webapp_staff_r webapp_admin_r;
+```
+
+### 域转换（Domain Transitions）
+
+自动生成进程域转换所需的所有规则：
+
+**PML 输入**:
+```csv
+t, webapp_t, webapp_worker_exec_t, process, webapp_worker_t
+```
+
+**SELinux 输出**:
+```selinux
+type_transition webapp_t webapp_worker_exec_t:process webapp_worker_t;
+allow webapp_t webapp_worker_exec_t:file { execute read open getattr };
+allow webapp_t webapp_worker_t:process transition;
+allow webapp_worker_t webapp_worker_exec_t:file entrypoint;
+```
+
+### 动作映射表
+
+支持自定义和扩展动作映射：
+
+```go
+// 默认映射
+read    → { read, open, getattr }
+write   → { write, open, append }
+execute → { execute, read, open, getattr, execute_no_trans }
+
+// 复合动作
+rw      → { read, write }
+rwx     → { read, write, execute }
+```
+
+查看完整示例: [examples/phase2/](examples/phase2/)
+
+## Architecture
+
 
 ## 开发
 

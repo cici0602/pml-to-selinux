@@ -228,3 +228,93 @@ func TestExtractBasePath(t *testing.T) {
 		})
 	}
 }
+
+// Tests for Phase 2: Directory and recursive support
+
+func TestIsDirectoryPattern(t *testing.T) {
+	pm := NewPathMapper()
+	
+	tests := []struct {
+		name     string
+		path     string
+		expected bool
+	}{
+		{"Directory with trailing slash", "/var/www/", true},
+		{"Recursive directory", "/var/www/*", true},
+		{"System directory", "/bin", true},
+		{"Regular file", "/etc/httpd.conf", false},
+		{"File pattern", "/var/log/*.log", false},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := pm.IsDirectoryPattern(tt.path)
+			if result != tt.expected {
+				t.Errorf("IsDirectoryPattern(%s) = %v, want %v", tt.path, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsRecursivePattern(t *testing.T) {
+	pm := NewPathMapper()
+	
+	tests := []struct {
+		name     string
+		path     string
+		expected bool
+	}{
+		{"Recursive pattern", "/var/www/*", true},
+		{"Non-recursive path", "/var/www/html", false},
+		{"Non-recursive file", "/etc/httpd.conf", false},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := pm.IsRecursivePattern(tt.path)
+			if result != tt.expected {
+				t.Errorf("IsRecursivePattern(%s) = %v, want %v", tt.path, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGenerateRecursivePatterns(t *testing.T) {
+	pm := NewPathMapper()
+	
+	tests := []struct {
+		name             string
+		path             string
+		expectedPatterns int
+		expectedPattern  string
+	}{
+		{
+			name:             "Recursive directory",
+			path:             "/var/www/*",
+			expectedPatterns: 1,
+			expectedPattern:  "/var/www(/.*)?" ,
+		},
+		{
+			name:             "Non-recursive file",
+			path:             "/etc/httpd.conf",
+			expectedPatterns: 1,
+			expectedPattern:  "/etc/httpd\\\\.conf",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			patterns := pm.GenerateRecursivePatterns(tt.path)
+			
+			if len(patterns) != tt.expectedPatterns {
+				t.Errorf("GenerateRecursivePatterns(%s) returned %d patterns, want %d", 
+					tt.path, len(patterns), tt.expectedPatterns)
+			}
+			
+			if len(patterns) > 0 && patterns[0].Pattern != tt.expectedPattern {
+				t.Errorf("GenerateRecursivePatterns(%s) pattern = %s, want %s", 
+					tt.path, patterns[0].Pattern, tt.expectedPattern)
+			}
+		})
+	}
+}

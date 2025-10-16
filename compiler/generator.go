@@ -10,19 +10,23 @@ import (
 
 // Generator orchestrates the conversion from PML to SELinux policy
 type Generator struct {
-	pml        *models.ParsedPML
-	moduleName string
-	typeMapper *mapping.TypeMapper
-	pathMapper *mapping.PathMapper
+	pml          *models.ParsedPML
+	moduleName   string
+	typeMapper   *mapping.TypeMapper
+	pathMapper   *mapping.PathMapper
+	roleMapper   *mapping.RoleMapper
+	actionMapper *mapping.ActionMapper
 }
 
 // NewGenerator creates a new Generator instance
 func NewGenerator(pml *models.ParsedPML, moduleName string) *Generator {
 	return &Generator{
-		pml:        pml,
-		moduleName: moduleName,
-		typeMapper: mapping.NewTypeMapper(moduleName),
-		pathMapper: mapping.NewPathMapper(),
+		pml:          pml,
+		moduleName:   moduleName,
+		typeMapper:   mapping.NewTypeMapper(moduleName),
+		pathMapper:   mapping.NewPathMapper(),
+		roleMapper:   mapping.NewRoleMapper(moduleName),
+		actionMapper: mapping.NewActionMapper(),
 	}
 }
 
@@ -161,8 +165,51 @@ func (g *Generator) convertTransitions(policy *models.SELinuxPolicy) error {
 		g.ensureType(policy, trans.SourceType)
 		g.ensureType(policy, trans.TargetType)
 		g.ensureType(policy, trans.NewType)
+		
+		// Generate domain transition helper rules if class is process
+		if trans.Class == "process" {
+			g.generateDomainTransitionRules(policy, trans.SourceType, trans.TargetType, trans.NewType)
+		}
 	}
 	return nil
+}
+
+// generateDomainTransitionRules generates helper rules for domain transitions
+// Adds the necessary rules for a process domain transition to work
+func (g *Generator) generateDomainTransitionRules(policy *models.SELinuxPolicy, sourceType, execType, targetType string) {
+	// Rule 1: Source domain can execute the target binary
+	policy.Rules = append(policy.Rules, models.AllowRule{
+		SourceType:  sourceType,
+		TargetType:  execType,
+		Class:       "file",
+		Permissions: []string{"execute", "read", "open", "getattr"},
+	})
+	
+	// Rule 2: Source domain can transition to target domain
+	policy.Rules = append(policy.Rules, models.AllowRule{
+		SourceType:  sourceType,
+		TargetType:  targetType,
+		Class:       "process",
+		Permissions: []string{"transition"},
+	})
+	
+	// Rule 3: Target domain entry point is the executable
+	policy.Rules = append(policy.Rules, models.AllowRule{
+		SourceType:  targetType,
+		TargetType:  execType,
+		Class:       "file",
+		Permissions: []string{"entrypoint"},
+	})
+	
+	// Mark executable type with exec_type attribute if not already present
+	for i, typeDecl := range policy.Types {
+		if typeDecl.TypeName == execType {
+			if !containsAttribute(typeDecl.Attributes, "exec_type") {
+				policy.Types[i].Attributes = append(policy.Types[i].Attributes, "exec_type")
+			}
+			break
+		}
+	}
 }
 
 // ensureType ensures a type is declared in the policy
@@ -179,46 +226,8 @@ func (g *Generator) ensureType(policy *models.SELinuxPolicy, typeName string) {
 
 // actionToPermissions maps PML action to SELinux class and permissions
 func (g *Generator) actionToPermissions(action string) (string, []string) {
-	// Default to file class
-	class := "file"
-	var permissions []string
-
-	actionLower := strings.ToLower(action)
-
-	// Map common actions
-	switch actionLower {
-	case "read":
-		permissions = []string{"read", "open", "getattr"}
-	case "write":
-		permissions = []string{"write", "append", "open"}
-	case "execute", "exec":
-		permissions = []string{"execute", "execute_no_trans"}
-	case "create":
-		permissions = []string{"create", "write", "open"}
-	case "delete":
-		permissions = []string{"unlink"}
-	case "rename":
-		permissions = []string{"rename"}
-	case "append":
-		permissions = []string{"append", "open"}
-	case "search":
-		class = "dir"
-		permissions = []string{"search", "open"}
-	case "list":
-		class = "dir"
-		permissions = []string{"read", "search", "open"}
-	default:
-		// Try to parse comma-separated permissions
-		if strings.Contains(action, ",") {
-			permissions = strings.Split(action, ",")
-			for i, perm := range permissions {
-				permissions[i] = strings.TrimSpace(perm)
-			}
-		} else {
-			permissions = []string{action}
-		}
-	}
-
+	// Use the action mapper for consistent mapping
+	class, permissions := g.actionMapper.MapAction(action, "")
 	return class, permissions
 }
 
@@ -237,24 +246,33 @@ func (g *Generator) generateFileContexts(policy *models.SELinuxPolicy) error {
 		}
 		seenPaths[pmlPolicy.Object] = true
 
-		// Convert path pattern to SELinux regex
-		pathPattern := g.pathMapper.ConvertToSELinuxPattern(pmlPolicy.Object)
+		// Generate recursive patterns for directories
+		patterns := g.pathMapper.GenerateRecursivePatterns(pmlPolicy.Object)
 		objectType := g.typeMapper.PathToType(pmlPolicy.Object)
 
-		// Determine file type from path
-		fileType := g.pathMapper.InferFileType(pmlPolicy.Object)
+		for _, pattern := range patterns {
+			fc := models.FileContext{
+				PathPattern: pattern.Pattern,
+				FileType:    pattern.FileType,
+				User:        "system_u",
+				Role:        "object_r",
+				Level:       "s0",
+			}
+			fc.Context = fmt.Sprintf("%s:%s:%s:%s", fc.User, fc.Role, objectType, fc.Level)
 
-		fc := models.FileContext{
-			PathPattern: pathPattern,
-			FileType:    fileType,
-			User:        "system_u",
-			Role:        "object_r",
-			Level:       "s0",
+			policy.FileContexts = append(policy.FileContexts, fc)
 		}
-		fc.Context = fmt.Sprintf("%s:%s:%s:%s", fc.User, fc.Role, objectType, fc.Level)
-
-		policy.FileContexts = append(policy.FileContexts, fc)
 	}
 
 	return nil
+}
+
+// Helper function to check if attributes contain a specific attribute
+func containsAttribute(attributes []string, attr string) bool {
+	for _, a := range attributes {
+		if a == attr {
+			return true
+		}
+	}
+	return false
 }
