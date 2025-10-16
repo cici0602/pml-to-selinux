@@ -253,3 +253,238 @@ func FormatDiff(result *DiffResult) string {
 
 	return builder.String()
 }
+
+// ConflictAnalysis contains detected policy conflicts
+type ConflictAnalysis struct {
+	AllowDenyConflicts   []string // Rules where same access is both allowed and denied
+	OverlappingRules     []string // Rules that may overlap in unintended ways
+	TypeMismatches       []string // Type usage inconsistencies
+	MissingDependencies  []string // Types used but not declared
+	CircularDependencies []string // Circular dependencies in type transitions
+}
+
+// DetectConflicts analyzes a policy for potential conflicts
+func DetectConflicts(policy *models.SELinuxPolicy) *ConflictAnalysis {
+	analysis := &ConflictAnalysis{
+		AllowDenyConflicts:   make([]string, 0),
+		OverlappingRules:     make([]string, 0),
+		TypeMismatches:       make([]string, 0),
+		MissingDependencies:  make([]string, 0),
+		CircularDependencies: make([]string, 0),
+	}
+
+	// Check for allow/deny conflicts
+	analysis.AllowDenyConflicts = detectAllowDenyConflicts(policy)
+
+	// Check for overlapping rules
+	analysis.OverlappingRules = detectOverlappingRules(policy)
+
+	// Check for missing type declarations
+	analysis.MissingDependencies = detectMissingTypes(policy)
+
+	// Check for circular dependencies in transitions
+	analysis.CircularDependencies = detectCircularDependencies(policy)
+
+	return analysis
+}
+
+// detectAllowDenyConflicts finds rules where the same access is both allowed and denied
+func detectAllowDenyConflicts(policy *models.SELinuxPolicy) []string {
+	conflicts := make([]string, 0)
+
+	// Create map of deny rules for quick lookup
+	denyMap := make(map[string]map[string]bool) // key: source|target|class, value: permissions
+
+	for _, denyRule := range policy.DenyRules {
+		key := fmt.Sprintf("%s|%s|%s", denyRule.SourceType, denyRule.TargetType, denyRule.Class)
+		if denyMap[key] == nil {
+			denyMap[key] = make(map[string]bool)
+		}
+		for _, perm := range denyRule.Permissions {
+			denyMap[key][perm] = true
+		}
+	}
+
+	// Check allow rules against deny rules
+	for _, allowRule := range policy.Rules {
+		key := fmt.Sprintf("%s|%s|%s", allowRule.SourceType, allowRule.TargetType, allowRule.Class)
+
+		if denyPerms, exists := denyMap[key]; exists {
+			for _, perm := range allowRule.Permissions {
+				if denyPerms[perm] {
+					conflict := fmt.Sprintf("CONFLICT: %s %s:%s { %s } is both allowed and denied",
+						allowRule.SourceType, allowRule.TargetType, allowRule.Class, perm)
+					conflicts = append(conflicts, conflict)
+				}
+			}
+		}
+	}
+
+	return conflicts
+}
+
+// detectOverlappingRules finds rules that may have unintended overlaps
+func detectOverlappingRules(policy *models.SELinuxPolicy) []string {
+	overlaps := make([]string, 0)
+
+	// Group rules by source type
+	rulesBySource := make(map[string][]models.AllowRule)
+	for _, rule := range policy.Rules {
+		rulesBySource[rule.SourceType] = append(rulesBySource[rule.SourceType], rule)
+	}
+
+	// Check for rules with identical source, target, and class
+	for source, rules := range rulesBySource {
+		seen := make(map[string]bool)
+		for _, rule := range rules {
+			key := fmt.Sprintf("%s|%s", rule.TargetType, rule.Class)
+			if seen[key] {
+				overlap := fmt.Sprintf("OVERLAP: Multiple rules for %s accessing %s:%s",
+					source, rule.TargetType, rule.Class)
+				overlaps = append(overlaps, overlap)
+			}
+			seen[key] = true
+		}
+	}
+
+	return overlaps
+}
+
+// detectMissingTypes finds types used in rules but not declared
+func detectMissingTypes(policy *models.SELinuxPolicy) []string {
+	missing := make([]string, 0)
+
+	// Build set of declared types
+	declaredTypes := make(map[string]bool)
+	for _, typeDecl := range policy.Types {
+		declaredTypes[typeDecl.TypeName] = true
+	}
+
+	// Check types in allow rules
+	usedTypes := make(map[string]bool)
+	for _, rule := range policy.Rules {
+		usedTypes[rule.SourceType] = true
+		usedTypes[rule.TargetType] = true
+	}
+
+	// Check types in deny rules
+	for _, rule := range policy.DenyRules {
+		usedTypes[rule.SourceType] = true
+		usedTypes[rule.TargetType] = true
+	}
+
+	// Check types in transitions
+	for _, trans := range policy.Transitions {
+		usedTypes[trans.SourceType] = true
+		usedTypes[trans.TargetType] = true
+		usedTypes[trans.NewType] = true
+	}
+
+	// Find missing types
+	for typeName := range usedTypes {
+		if !declaredTypes[typeName] {
+			missing = append(missing, fmt.Sprintf("Type '%s' is used but not declared", typeName))
+		}
+	}
+
+	return missing
+}
+
+// detectCircularDependencies finds circular dependencies in type transitions
+func detectCircularDependencies(policy *models.SELinuxPolicy) []string {
+	circular := make([]string, 0)
+
+	// Build transition graph
+	graph := make(map[string][]string) // source -> targets
+
+	for _, trans := range policy.Transitions {
+		key := fmt.Sprintf("%s:%s", trans.SourceType, trans.TargetType)
+		graph[key] = append(graph[key], trans.NewType)
+	}
+
+	// Check for cycles (simplified DFS)
+	visited := make(map[string]bool)
+	recStack := make(map[string]bool)
+
+	var detectCycle func(node string) bool
+	detectCycle = func(node string) bool {
+		visited[node] = true
+		recStack[node] = true
+
+		for _, neighbor := range graph[node] {
+			neighborKey := neighbor
+			for k := range graph {
+				if strings.HasPrefix(k, neighborKey+":") {
+					if !visited[k] {
+						if detectCycle(k) {
+							return true
+						}
+					} else if recStack[k] {
+						circular = append(circular, fmt.Sprintf("Circular dependency detected: %s -> %s", node, k))
+						return true
+					}
+				}
+			}
+		}
+
+		recStack[node] = false
+		return false
+	}
+
+	for node := range graph {
+		if !visited[node] {
+			detectCycle(node)
+		}
+	}
+
+	return circular
+}
+
+// FormatConflictAnalysis formats conflict analysis as a human-readable string
+func FormatConflictAnalysis(analysis *ConflictAnalysis) string {
+	var builder strings.Builder
+
+	hasConflicts := false
+
+	if len(analysis.AllowDenyConflicts) > 0 {
+		hasConflicts = true
+		builder.WriteString("Allow/Deny Conflicts:\n")
+		for _, conflict := range analysis.AllowDenyConflicts {
+			builder.WriteString(fmt.Sprintf("  ! %s\n", conflict))
+		}
+		builder.WriteString("\n")
+	}
+
+	if len(analysis.OverlappingRules) > 0 {
+		hasConflicts = true
+		builder.WriteString("Overlapping Rules:\n")
+		for _, overlap := range analysis.OverlappingRules {
+			builder.WriteString(fmt.Sprintf("  ! %s\n", overlap))
+		}
+		builder.WriteString("\n")
+	}
+
+	if len(analysis.MissingDependencies) > 0 {
+		hasConflicts = true
+		builder.WriteString("Missing Type Declarations:\n")
+		for _, missing := range analysis.MissingDependencies {
+			builder.WriteString(fmt.Sprintf("  ! %s\n", missing))
+		}
+		builder.WriteString("\n")
+	}
+
+	if len(analysis.CircularDependencies) > 0 {
+		hasConflicts = true
+		builder.WriteString("Circular Dependencies:\n")
+		for _, circular := range analysis.CircularDependencies {
+			builder.WriteString(fmt.Sprintf("  ! %s\n", circular))
+		}
+		builder.WriteString("\n")
+	}
+
+	if !hasConflicts {
+		return "No conflicts detected.\n"
+	}
+
+	return builder.String()
+}

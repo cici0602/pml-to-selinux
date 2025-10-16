@@ -33,10 +33,19 @@ type RoleRelation struct {
 	Role   string // The role/group name
 }
 
+// BooleanDefinition represents a SELinux boolean definition
+// Format: bool, name, default_value, description
+type BooleanDefinition struct {
+	Name         string // e.g., "httpd_can_network_connect"
+	DefaultValue bool   // true or false
+	Description  string // Human-readable description
+}
+
 // ParsedPML contains all parsed PML data
 type ParsedPML struct {
 	Model       *PMLModel
 	Policies    []Policy
 	Roles       []RoleRelation
 	Transitions []Transition
+	Booleans    []BooleanDefinition
 }

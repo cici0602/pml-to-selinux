@@ -9,6 +9,9 @@ type SELinuxPolicy struct {
 	DenyRules    []DenyRule
 	Transitions  []TypeTransition
 	FileContexts []FileContext
+	Booleans     []BooleanDeclaration
+	Interfaces   []InterfaceDefinition
+	Macros       []MacroDefinition
 }
 
 // TypeDeclaration represents a SELinux type declaration
@@ -61,6 +64,28 @@ type InterfaceDefinition struct {
 	Body        string
 }
 
+// BooleanDeclaration represents a SELinux boolean declaration
+type BooleanDeclaration struct {
+	Name         string
+	DefaultValue bool
+	Description  string
+}
+
+// ConditionalRule represents a rule that depends on a boolean
+type ConditionalRule struct {
+	BooleanName string
+	Condition   bool // true for "if", false for "if not"
+	Rule        AllowRule
+}
+
+// MacroDefinition represents a SELinux macro (m4 macro)
+type MacroDefinition struct {
+	Name        string
+	Description string
+	Parameters  []string
+	Body        string
+}
+
 // NewSELinuxPolicy creates a new SELinuxPolicy with default values
 func NewSELinuxPolicy(moduleName, version string) *SELinuxPolicy {
 	return &SELinuxPolicy{
@@ -71,6 +96,9 @@ func NewSELinuxPolicy(moduleName, version string) *SELinuxPolicy {
 		DenyRules:    make([]DenyRule, 0),
 		Transitions:  make([]TypeTransition, 0),
 		FileContexts: make([]FileContext, 0),
+		Booleans:     make([]BooleanDeclaration, 0),
+		Interfaces:   make([]InterfaceDefinition, 0),
+		Macros:       make([]MacroDefinition, 0),
 	}
 }
 
@@ -124,4 +152,23 @@ func (p *SELinuxPolicy) GetTypeByName(name string) *TypeDeclaration {
 // HasType checks if a type exists in the policy
 func (p *SELinuxPolicy) HasType(typeName string) bool {
 	return p.GetTypeByName(typeName) != nil
+}
+
+// AddBoolean adds a boolean declaration to the policy
+func (p *SELinuxPolicy) AddBoolean(name string, defaultValue bool, description string) {
+	p.Booleans = append(p.Booleans, BooleanDeclaration{
+		Name:         name,
+		DefaultValue: defaultValue,
+		Description:  description,
+	})
+}
+
+// AddInterface adds an interface definition to the policy
+func (p *SELinuxPolicy) AddInterface(iface InterfaceDefinition) {
+	p.Interfaces = append(p.Interfaces, iface)
+}
+
+// AddMacro adds a macro definition to the policy
+func (p *SELinuxPolicy) AddMacro(macro MacroDefinition) {
+	p.Macros = append(p.Macros, macro)
 }

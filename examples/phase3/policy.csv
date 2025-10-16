@@ -1,0 +1,22 @@
+# Booleans
+bool, httpd_enable_homedirs, false, "Allow httpd to read user home directories"
+bool, httpd_can_network_connect, true, "Allow httpd to connect to network"
+
+# Basic web server rules
+p, httpd, /var/www/html/*, read, file, allow
+p, httpd, /var/log/httpd/*, write, file, allow
+p, httpd, /var/run/httpd.pid, create, file, allow
+
+# Allow httpd to listen on common ports
+p, httpd, 80, name_bind, tcp_socket, allow
+p, httpd, 443, name_bind, tcp_socket, allow
+
+# Conditional rule based on boolean
+p, httpd, /home/*, read, dir, allow, if httpd_enable_homedirs
+
+# Domain transition for CGI scripts
+t, httpd, httpd_sys_script_exec_t, process, httpd_sys_script_t
+
+# Rules for the transitioned domain
+p, httpd_sys_script_t, /bin/sh, execute, file, allow
+p, httpd_sys_script_t, /var/tmp/*, rw, file, allow

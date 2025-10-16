@@ -32,6 +32,12 @@ func (o *Optimizer) Optimize() error {
 	// Remove duplicate deny rules
 	o.deduplicateDenyRules()
 
+	// Remove redundant rules (covered by more general rules)
+	o.removeRedundantRules()
+
+	// Remove unused types
+	o.removeUnusedTypes()
+
 	return nil
 }
 
@@ -238,4 +244,137 @@ func (o *Optimizer) GetStatistics(originalPolicy *models.SELinuxPolicy) Optimiza
 func OptimizePolicy(policy *models.SELinuxPolicy) error {
 	optimizer := NewOptimizer(policy)
 	return optimizer.Optimize()
+}
+
+// removeRedundantRules removes rules that are redundant or covered by more general rules
+func (o *Optimizer) removeRedundantRules() {
+	if len(o.policy.Rules) == 0 {
+		return
+	}
+
+	// Build a map of rules for quick lookup
+	ruleMap := make(map[string]models.AllowRule)
+	for _, rule := range o.policy.Rules {
+		key := rule.SourceType + "|" + rule.TargetType + "|" + rule.Class
+		ruleMap[key] = rule
+	}
+
+	// Check for subsumption: rule A subsumes rule B if they have the same
+	// source, target, and class, and A's permissions are a superset of B's
+	nonRedundant := make([]models.AllowRule, 0)
+
+	for _, rule := range o.policy.Rules {
+		isRedundant := false
+
+		for _, otherRule := range o.policy.Rules {
+			if rule.SourceType == otherRule.SourceType &&
+				rule.TargetType == otherRule.TargetType &&
+				rule.Class == otherRule.Class &&
+				len(otherRule.Permissions) > len(rule.Permissions) &&
+				isSubset(rule.Permissions, otherRule.Permissions) {
+				isRedundant = true
+				break
+			}
+		}
+
+		if !isRedundant {
+			nonRedundant = append(nonRedundant, rule)
+		}
+	}
+
+	o.policy.Rules = nonRedundant
+}
+
+// removeUnusedTypes removes type declarations that are not referenced in any rules
+func (o *Optimizer) removeUnusedTypes() {
+	if len(o.policy.Types) == 0 {
+		return
+	}
+
+	// Collect all types used in rules, transitions, and file contexts
+	usedTypes := make(map[string]bool)
+
+	for _, rule := range o.policy.Rules {
+		usedTypes[rule.SourceType] = true
+		usedTypes[rule.TargetType] = true
+	}
+
+	for _, rule := range o.policy.DenyRules {
+		usedTypes[rule.SourceType] = true
+		usedTypes[rule.TargetType] = true
+	}
+
+	for _, trans := range o.policy.Transitions {
+		usedTypes[trans.SourceType] = true
+		usedTypes[trans.TargetType] = true
+		usedTypes[trans.NewType] = true
+	}
+
+	// Keep only types that are used
+	usedTypesList := make([]models.TypeDeclaration, 0)
+	for _, typeDecl := range o.policy.Types {
+		if usedTypes[typeDecl.TypeName] {
+			usedTypesList = append(usedTypesList, typeDecl)
+		}
+	}
+
+	o.policy.Types = usedTypesList
+}
+
+// isSubset checks if all elements of subset are in superset
+func isSubset(subset, superset []string) bool {
+	superMap := make(map[string]bool)
+	for _, item := range superset {
+		superMap[item] = true
+	}
+
+	for _, item := range subset {
+		if !superMap[item] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// AnalyzeComplexity analyzes the complexity of the policy
+type ComplexityAnalysis struct {
+	TotalRules          int
+	TotalTypes          int
+	TotalBooleans       int
+	AverageRulesPerType float64
+	MaxRulesPerType     int
+	ComplexityScore     int // Simple heuristic: total_rules + total_types*2
+}
+
+// AnalyzeComplexity performs complexity analysis on the policy
+func (o *Optimizer) AnalyzeComplexity() ComplexityAnalysis {
+	// Count rules per type
+	rulesPerType := make(map[string]int)
+	for _, rule := range o.policy.Rules {
+		rulesPerType[rule.SourceType]++
+	}
+
+	maxRules := 0
+	totalRulesInTypes := 0
+	for _, count := range rulesPerType {
+		if count > maxRules {
+			maxRules = count
+		}
+		totalRulesInTypes += count
+	}
+
+	avgRules := 0.0
+	if len(rulesPerType) > 0 {
+		avgRules = float64(totalRulesInTypes) / float64(len(rulesPerType))
+	}
+
+	return ComplexityAnalysis{
+		TotalRules:          len(o.policy.Rules),
+		TotalTypes:          len(o.policy.Types),
+		TotalBooleans:       len(o.policy.Booleans),
+		AverageRulesPerType: avgRules,
+		MaxRulesPerType:     maxRules,
+		ComplexityScore:     len(o.policy.Rules) + len(o.policy.Types)*2,
+	}
 }

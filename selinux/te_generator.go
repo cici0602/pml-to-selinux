@@ -30,6 +30,11 @@ func (g *TEGenerator) Generate() (string, error) {
 	// Write policy module declaration
 	g.writePolicyModule(&builder)
 
+	// Write boolean declarations
+	if err := g.writeBooleanDeclarations(&builder); err != nil {
+		return "", err
+	}
+
 	// Write type declarations
 	if err := g.writeTypeDeclarations(&builder); err != nil {
 		return "", err
@@ -67,6 +72,45 @@ func (g *TEGenerator) writePolicyModule(builder *strings.Builder) {
 	builder.WriteString(fmt.Sprintf("policy_module(%s, %s)\n\n",
 		g.policy.ModuleName,
 		g.policy.Version))
+}
+
+// writeBooleanDeclarations writes all boolean declarations
+func (g *TEGenerator) writeBooleanDeclarations(builder *strings.Builder) error {
+	if len(g.policy.Booleans) == 0 {
+		return nil
+	}
+
+	builder.WriteString("########################################\n")
+	builder.WriteString("# Boolean Declarations\n")
+	builder.WriteString("########################################\n\n")
+
+	// Sort booleans for consistent output
+	bools := make([]models.BooleanDeclaration, len(g.policy.Booleans))
+	copy(bools, g.policy.Booleans)
+	sort.Slice(bools, func(i, j int) bool {
+		return bools[i].Name < bools[j].Name
+	})
+
+	for _, boolean := range bools {
+		// Write description as comment if provided
+		if boolean.Description != "" {
+			builder.WriteString("## <desc>\n")
+			builder.WriteString("## <p>\n")
+			builder.WriteString(fmt.Sprintf("## %s\n", boolean.Description))
+			builder.WriteString("## </p>\n")
+			builder.WriteString("## </desc>\n")
+		}
+
+		// Write boolean declaration
+		defaultStr := "false"
+		if boolean.DefaultValue {
+			defaultStr = "true"
+		}
+		builder.WriteString(fmt.Sprintf("gen_tunable(%s, %s)\n\n", boolean.Name, defaultStr))
+	}
+
+	builder.WriteString("\n")
+	return nil
 }
 
 // writeTypeDeclarations writes all type declarations
