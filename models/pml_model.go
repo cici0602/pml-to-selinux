@@ -18,6 +18,15 @@ type Policy struct {
 	Effect  string // "allow" or "deny"
 }
 
+// Transition represents a type transition rule from PML
+// Format: t, source_type, target_type, class, new_type
+type Transition struct {
+	SourceType string // Domain that creates the object
+	TargetType string // Type of the parent object
+	Class      string // Object class (file, dir, etc.)
+	NewType    string // Resulting type of the new object
+}
+
 // RoleRelation represents a role/group relationship
 type RoleRelation struct {
 	Member string // The member of the group
@@ -26,7 +35,8 @@ type RoleRelation struct {
 
 // ParsedPML contains all parsed PML data
 type ParsedPML struct {
-	Model    *PMLModel
-	Policies []Policy
-	Roles    []RoleRelation
+	Model       *PMLModel
+	Policies    []Policy
+	Roles       []RoleRelation
+	Transitions []Transition
 }

@@ -1,155 +1,44 @@
-# PML-to-SELinux Compiler - AI Agent Instructions
+<!-- Compact Copilot instructions for pml-to-selinux -->
+# Quick AI coding guide — pml-to-selinux
 
-## Project Overview
+This file gives focused, actionable guidance for an AI coding agent to be productive in this repository.
 
-This is a compiler that translates **Casbin PML (Policy Modeling Language)** into **SELinux policy files** (.te, .fc). It bridges high-level access control policies with Linux kernel security modules.
+1) Big picture
+- Purpose: a compiler that converts Casbin PML (model .conf + policy .csv) into SELinux policy files (.te, .fc).
+- High-level pipeline: CLI (`cli/main.go`) → Parser (`compiler/parser.go`) → Analyzer (`compiler/analyzer.go`) → Mapping (`mapping/*`) → SELinux generators (`selinux/te_generator.go`, `selinux/fc_generator.go`) → Optimizer (`compiler/optimizer.go`).
 
-**Core Value Proposition**: Write security policies in Casbin's human-readable format and automatically generate production-ready SELinux policies.
+2) Where to start (local navigation)
+- Read `README.md` at project root for an overview and `compiler/README.md` for parser/analyzer details.
+- Entry point for CLI: `cli/main.go` (uses Cobra). For unit tests look under `compiler/`, `mapping/`, `selinux/`.
 
-## Architecture & Pipeline
+3) Build & test commands (run in repository root)
+- Build the CLI binary: `go build ./cli`.
+- Run unit tests: `go test ./...` or target package: `go test ./compiler -v`.
+- Run examples/demos: `go run tests/demo_parser.go examples/httpd/httpd_model.conf examples/httpd/httpd_policy.csv`.
 
-The compilation happens in 6 stages:
+4) Project-specific patterns & conventions
+- Error handling: parsing errors often return `*compiler.ParseError` with file and line — preserve structured errors when changing parser code (see `compiler/README.md` examples).
+- Path mapping: mapping logic is centralized in `mapping/type_mapping.go` and `mapping/context_mapping.go`; prefer changes here when modifying Path→Type inference.
+- Generators emit SELinux artifacts in `selinux/` and expect normalized model structures from `models/`.
+- CLI uses Cobra flags (see `cli/main.go`) — keep flags stable to avoid breaking user scripts.
 
-```
-PML Files → Parser → Analyzer → Generator → Optimizer → SELinux Files
- (.conf/.csv)  ↓       ↓          ↓           ↓         (.te/.fc)
-            models/  compiler/  selinux/  compiler/
-           ParsedPML  validation mapping  optimizer
-```
+5) Integration points and external deps
+- Cobra for CLI (`github.com/spf13/cobra`) — changes to CLI should update `go.mod` and keep compatibility with Cobra v1.x API.
+- No network calls or external services; tests rely on local example files under `examples/`.
 
-### Package Responsibilities
+6) Helpful file examples to reference in PRs
+- Parser: `compiler/parser.go`, `compiler/parser_test.go` (or tests under `compiler/`).
+- Analyzer & optimizer: `compiler/analyzer.go`, `compiler/optimizer.go`.
+- Mapping: `mapping/type_mapping.go`, `mapping/context_mapping.go`.
+- Generators: `selinux/te_generator.go`, `selinux/fc_generator.go`.
 
-- **`models/`**: Core data structures
-  - `pml_model.go`: Casbin PML structures (Policy, RoleRelation, ParsedPML)
-  - `selinux_model.go`: SELinux structures (AllowRule, DenyRule, FileContext, TypeDeclaration)
-  
-- **`compiler/`**: Parsing and analysis
-  - `parser.go`: Reads `.conf` (model) and `.csv` (policy) files
-  - `analyzer.go`: Validates model completeness, policy rules, detects conflicts
-  - `optimizer.go`: Merges rules, deduplicates types/contexts
+7) Common edits and cautions
+- When changing AST/data models in `models/`, update all consumers: parser → analyzer → mapping → generators → tests.
+- Keep CLI flags and output messages stable; tests and examples parse CLI outputs.
+- Unit tests in `tests/` and package tests expect deterministic ordering; maintain stable map/list ordering when possible.
 
-- **`mapping/`**: Translation logic (the "magic")
-  - `context_mapping.go`: Converts Casbin wildcards to SELinux regex
-    - `/var/www/*` → `/var/www(/.*)?`
-    - `/etc/*.conf` → `/etc/[^/]+\.conf`
-  - `type_mapping.go`: Generates SELinux type names from paths
-    - `/var/log/httpd/*` → `httpd_var_log_httpd_t`
-    - Infers attributes: logfile, configfile, exec_type
+8) Quick examples for the agent
+- To add a new mapping rule: edit `mapping/type_mapping.go` and add a unit test under `mapping/` verifying `Path→Type` inference.
+- To add a CLI flag: edit `cli/main.go`, add flag using Cobra, wire into command handler in `cli/` and add an integration test under `tests/`.
 
-- **`selinux/`**: Output generation
-  - `te_generator.go`: Creates Type Enforcement files with policy_module, type declarations, allow/deny rules
-  - `fc_generator.go`: Creates File Context files with gen_context() macros
-
-- **`cli/`**: Command-line interface (work in progress)
-  - Uses Cobra framework
-  - Main command: `pml2selinux compile -m model.conf -p policy.csv`
-
-## Critical Patterns & Conventions
-
-### 1. PML Policy Format
-```csv
-p, subject, object, action, class, effect
-p, httpd_t, /var/www/html/*, read, file, allow
-```
-- **subject**: SELinux type (e.g., `httpd_t`)
-- **object**: File path with wildcards
-- **action**: Permission name (read, write, execute)
-- **class**: Object class (file, dir, tcp_socket)
-- **effect**: allow or deny
-
-### 2. Path Pattern Translation Rules
-When converting paths in `mapping/context_mapping.go`:
-- Trailing wildcards: `/*` → `(/.*)?` (matches directory contents)
-- Mid-path wildcards: `*` → `[^/]+` (matches single path component)
-- Always escape regex special chars: `.`, `+`, `(`, `)`, etc.
-- File type inference: paths ending `/` are directories
-
-### 3. Type Naming Convention
-Generated types follow: `{module}_{normalized_path}_t`
-- Replace `/` with `_`
-- Replace `-` and `.` with `_`
-- Remove leading `/`
-- Example: `/var/log/httpd/*` with module "httpd" → `httpd_var_log_httpd_t`
-
-### 4. Rule Optimization Strategy
-The optimizer merges rules with same source/target/class:
-```selinux
-# Before
-allow httpd_t file_t:file read;
-allow httpd_t file_t:file write;
-
-# After  
-allow httpd_t file_t:file { read write };
-```
-
-## Development Workflows
-
-### Running Tests
-```bash
-# All tests (50+ test cases)
-go test ./... -v
-
-# Specific package
-go test ./mapping -v          # Path/type mapping tests
-go test ./compiler -v         # Parser/analyzer tests
-```
-
-### Demo/Integration Testing
-```bash
-cd tests
-go run demo_phase2.go         # Full pipeline demo using httpd example
-```
-
-### Building CLI (when implemented)
-```bash
-cd cli
-go build -o pml2selinux
-./pml2selinux compile -m ../examples/httpd/httpd_model.conf -p ../examples/httpd/httpd_policy.csv -o output/
-```
-
-## Example Data Locations
-
-- **Example policies**: `examples/httpd/` and `examples/basic/`
-- **Test fixtures**: Embedded in `*_test.go` files
-- **Demo program**: `tests/demo_phase2.go` shows complete workflow
-
-## Key Files to Reference
-
-When working on:
-- **Path conversion**: See `mapping/context_mapping_test.go` for 16 test cases covering edge cases
-- **Type generation**: See `mapping/type_mapping_test.go` for system path detection patterns
-- **SELinux output format**: See `selinux/te_generator.go` lines 50-150 for formatting rules
-- **PML parsing**: See `compiler/parser.go` parseModel() and parsePolicy() methods
-
-## Common Pitfalls
-
-1. **Path escaping**: Always escape regex chars BEFORE converting wildcards, not after
-2. **Type attributes**: Different paths imply different attributes:
-   - `/bin`, `/sbin` → exec_type
-   - `/var/log`, `*.log` → logfile
-   - `/etc`, `*.conf` → configfile
-3. **Rule merging**: Must preserve original object path in `OriginalObject` field for traceability
-4. **File contexts**: Always set defaults: `system_u:object_r:{type}:s0`
-
-## Project Status
-
-- ✅ **Phase 1 Complete**: Parser, analyzer (17 + 7 test suites)
-- ✅ **Phase 2 Complete**: Mappers, generators, optimizer (30+ tests)
-- 🚧 **Phase 3 In Progress**: Full CLI implementation
-
-See `PHASE2_COMPLETED.md` for detailed feature list.
-
-## Testing Philosophy
-
-- Unit tests for each mapper function with edge cases
-- Integration tests via demo programs
-- No mocking - tests use real file I/O with example data
-- Test output consistency: always sort types/rules for deterministic output
-
-## Notes on SELinux Specifics
-
-This compiler targets **SELinux reference policy** format:
-- Uses `policy_module()` macro (not raw policy)
-- Type declarations include attributes for policy inference
-- File contexts use `gen_context()` macro for MLS/MCS support
-- Deny rules use `neverallow` (compile-time enforcement)
+If anything above is unclear or you want more detail on specific components (parser, mapping rules, or the generator), tell me which area and I will expand with code pointers and small TODOs.

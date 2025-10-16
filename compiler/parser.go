@@ -43,15 +43,16 @@ func (p *Parser) Parse() (*models.ParsedPML, error) {
 	}
 
 	// Parse policy file
-	policies, roles, err := p.parsePolicy()
+	policies, roles, transitions, err := p.parsePolicy()
 	if err != nil {
 		return nil, err
 	}
 
 	return &models.ParsedPML{
-		Model:    model,
-		Policies: policies,
-		Roles:    roles,
+		Model:       model,
+		Policies:    policies,
+		Roles:       roles,
+		Transitions: transitions,
 	}, nil
 }
 
@@ -152,15 +153,16 @@ func parseDefinitionValue(value string) []string {
 }
 
 // parsePolicy parses the CSV policy file
-func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, error) {
+func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, []models.Transition, error) {
 	file, err := os.Open(p.policyPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open policy file: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to open policy file: %w", err)
 	}
 	defer file.Close()
 
 	var policies []models.Policy
 	var roles []models.RoleRelation
+	var transitions []models.Transition
 
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
@@ -187,7 +189,7 @@ func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, error) {
 		case "p":
 			// Policy rule: p, subject, object, action, class, effect
 			if len(fields) != 6 {
-				return nil, nil, &ParseError{
+				return nil, nil, nil, &ParseError{
 					File:    p.policyPath,
 					Line:    lineNum,
 					Message: fmt.Sprintf("policy rule expects 6 fields, got %d: %s", len(fields), line),
@@ -201,10 +203,26 @@ func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, error) {
 				Effect:  strings.TrimSpace(fields[5]),
 			})
 
+		case "t":
+			// Type transition: t, source_type, target_type, class, new_type
+			if len(fields) != 5 {
+				return nil, nil, nil, &ParseError{
+					File:    p.policyPath,
+					Line:    lineNum,
+					Message: fmt.Sprintf("type transition expects 5 fields, got %d: %s", len(fields), line),
+				}
+			}
+			transitions = append(transitions, models.Transition{
+				SourceType: strings.TrimSpace(fields[1]),
+				TargetType: strings.TrimSpace(fields[2]),
+				Class:      strings.TrimSpace(fields[3]),
+				NewType:    strings.TrimSpace(fields[4]),
+			})
+
 		case "g", "g2", "g3":
 			// Role relation: g, member, role
 			if len(fields) != 3 {
-				return nil, nil, &ParseError{
+				return nil, nil, nil, &ParseError{
 					File:    p.policyPath,
 					Line:    lineNum,
 					Message: fmt.Sprintf("role relation expects 3 fields, got %d: %s", len(fields), line),
@@ -216,7 +234,7 @@ func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, error) {
 			})
 
 		default:
-			return nil, nil, &ParseError{
+			return nil, nil, nil, &ParseError{
 				File:    p.policyPath,
 				Line:    lineNum,
 				Message: fmt.Sprintf("unknown rule type: %s", ruleType),
@@ -225,10 +243,10 @@ func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, nil, fmt.Errorf("error reading policy file: %w", err)
+		return nil, nil, nil, fmt.Errorf("error reading policy file: %w", err)
 	}
 
-	return policies, roles, nil
+	return policies, roles, transitions, nil
 }
 
 // parseCSVLine parses a CSV line, handling simple quoted fields

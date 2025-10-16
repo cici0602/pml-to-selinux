@@ -44,6 +44,7 @@ func (g *Generator) Generate() (*models.SELinuxPolicy, error) {
 		Types:        make([]models.TypeDeclaration, 0),
 		Rules:        make([]models.AllowRule, 0),
 		DenyRules:    make([]models.DenyRule, 0),
+		Transitions:  make([]models.TypeTransition, 0),
 		FileContexts: make([]models.FileContext, 0),
 	}
 
@@ -57,6 +58,11 @@ func (g *Generator) Generate() (*models.SELinuxPolicy, error) {
 
 	// Convert policies to SELinux rules
 	if err := g.convertPolicies(policy); err != nil {
+		return nil, err
+	}
+
+	// Convert transitions
+	if err := g.convertTransitions(policy); err != nil {
 		return nil, err
 	}
 
@@ -137,6 +143,38 @@ func (g *Generator) convertPolicies(policy *models.SELinuxPolicy) error {
 	}
 
 	return nil
+}
+
+// convertTransitions converts PML transitions to SELinux type_transition rules
+func (g *Generator) convertTransitions(policy *models.SELinuxPolicy) error {
+	for _, trans := range g.pml.Transitions {
+		// Ensure transition types are added to policy
+		selinuxTrans := models.TypeTransition{
+			SourceType: trans.SourceType,
+			TargetType: trans.TargetType,
+			Class:      trans.Class,
+			NewType:    trans.NewType,
+		}
+		policy.Transitions = append(policy.Transitions, selinuxTrans)
+
+		// Ensure all types are declared
+		g.ensureType(policy, trans.SourceType)
+		g.ensureType(policy, trans.TargetType)
+		g.ensureType(policy, trans.NewType)
+	}
+	return nil
+}
+
+// ensureType ensures a type is declared in the policy
+func (g *Generator) ensureType(policy *models.SELinuxPolicy, typeName string) {
+	for _, t := range policy.Types {
+		if t.TypeName == typeName {
+			return
+		}
+	}
+	policy.Types = append(policy.Types, models.TypeDeclaration{
+		TypeName: typeName,
+	})
 }
 
 // actionToPermissions maps PML action to SELinux class and permissions

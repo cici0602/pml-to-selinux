@@ -10,13 +10,15 @@ import (
 )
 
 var (
-	modelPath  string
-	policyPath string
-	outputDir  string
-	moduleName string
-	validate   bool
-	optimize   bool
-	verbose    bool
+	modelPath   string
+	policyPath  string
+	outputDir   string
+	moduleName  string
+	validate    bool
+	optimize    bool
+	verbose     bool
+	modelPath2  string
+	policyPath2 string
 )
 
 func main() {
@@ -78,6 +80,33 @@ language and automatically generate SELinux policies.`,
 	analyzeCmd.MarkFlagRequired("model")
 	analyzeCmd.MarkFlagRequired("policy")
 
+	// Diff command
+	diffCmd := &cobra.Command{
+		Use:   "diff",
+		Short: "Compare two PML policies",
+		Long:  "Compare two PML policy sets and show the differences",
+		Run:   runDiff,
+	}
+
+	diffCmd.Flags().StringVarP(&modelPath, "model1", "m", "", "Path to first PML model file (required)")
+	diffCmd.Flags().StringVarP(&policyPath, "policy1", "p", "", "Path to first PML policy file (required)")
+	diffCmd.Flags().StringVar(&modelPath2, "model2", "", "Path to second PML model file (required)")
+	diffCmd.Flags().StringVar(&policyPath2, "policy2", "", "Path to second PML policy file (required)")
+
+	diffCmd.MarkFlagRequired("model1")
+	diffCmd.MarkFlagRequired("policy1")
+	diffCmd.MarkFlagRequired("model2")
+	diffCmd.MarkFlagRequired("policy2")
+
+	// Init command
+	initCmd := &cobra.Command{
+		Use:   "init [project-name]",
+		Short: "Initialize a new PML project",
+		Long:  "Create a new PML project with template files",
+		Args:  cobra.ExactArgs(1),
+		Run:   runInit,
+	}
+
 	// Version command
 	versionCmd := &cobra.Command{
 		Use:   "version",
@@ -90,6 +119,8 @@ language and automatically generate SELinux policies.`,
 	rootCmd.AddCommand(compileCmd)
 	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(analyzeCmd)
+	rootCmd.AddCommand(diffCmd)
+	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(versionCmd)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -194,6 +225,14 @@ func runCompile(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Generate .if file
+	ifGenerator := selinux.NewIFGenerator(selinuxPolicy)
+	ifContent, err := ifGenerator.Generate()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ IF generation error: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Create output directory
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Failed to create output directory: %v\n", err)
@@ -214,9 +253,17 @@ func runCompile(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Write .if file
+	ifPath := fmt.Sprintf("%s/%s.if", outputDir, selinuxPolicy.ModuleName)
+	if err := os.WriteFile(ifPath, []byte(ifContent), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to write .if file: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Printf("✓ Compilation successful!\n")
 	fmt.Printf("  Generated: %s\n", tePath)
 	fmt.Printf("  Generated: %s\n", fcPath)
+	fmt.Printf("  Generated: %s\n", ifPath)
 
 	if validate {
 		fmt.Println("\nℹ To validate and install the policy, run:")
@@ -321,4 +368,187 @@ func runAnalyze(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Println("\n✓ Analysis complete")
+}
+
+func runDiff(cmd *cobra.Command, args []string) {
+	fmt.Println("Comparing PML policies...")
+
+	// Parse first policy
+	parser1 := compiler.NewParser(modelPath, policyPath)
+	pml1, err := parser1.Parse()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Error parsing first policy: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Generate first SELinux policy
+	gen1 := compiler.NewGenerator(pml1, "")
+	policy1, err := gen1.Generate()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Error generating first policy: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Parse second policy
+	parser2 := compiler.NewParser(modelPath2, policyPath2)
+	pml2, err := parser2.Parse()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Error parsing second policy: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Generate second SELinux policy
+	gen2 := compiler.NewGenerator(pml2, "")
+	policy2, err := gen2.Generate()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Error generating second policy: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Compare policies
+	differ := compiler.NewDiffer(policy1, policy2)
+	diffResult := differ.Diff()
+
+	// Display results
+	fmt.Println("\nPolicy Comparison:")
+	fmt.Printf("  Policy 1: %s/%s\n", modelPath, policyPath)
+	fmt.Printf("  Policy 2: %s/%s\n\n", modelPath2, policyPath2)
+
+	output := compiler.FormatDiff(diffResult)
+	fmt.Print(output)
+}
+
+func runInit(cmd *cobra.Command, args []string) {
+	projectName := args[0]
+	fmt.Printf("Creating new PML project: %s\n", projectName)
+
+	// Create project directory
+	if err := os.MkdirAll(projectName, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to create project directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Template model file
+	modelTemplate := `[request_definition]
+r = sub, obj, act, class
+
+[policy_definition]
+p = sub, obj, act, class, eft
+
+[role_definition]
+g = _, _
+g2 = _, _
+
+[policy_effect]
+e = some(where (p.eft == allow)) && !some(where (p.eft == deny))
+
+[matchers]
+m = g(r.sub, p.sub) && matchPath(r.obj, p.obj) && r.act == p.act && r.class == p.class
+`
+
+	// Template policy file
+	policyTemplate := `# Example policy for ` + projectName + `
+# Format: p, subject, object, action, class, effect
+
+# Allow ` + projectName + `_t to read config files
+p, ` + projectName + `_t, /etc/` + projectName + `/*, read, file, allow
+
+# Allow ` + projectName + `_t to write log files
+p, ` + projectName + `_t, /var/log/` + projectName + `/*, write, file, allow
+
+# Allow ` + projectName + `_t to manage data files
+p, ` + projectName + `_t, /var/lib/` + projectName + `/*, read, file, allow
+p, ` + projectName + `_t, /var/lib/` + projectName + `/*, write, file, allow
+
+# Deny ` + projectName + `_t from accessing sensitive files
+p, ` + projectName + `_t, /etc/shadow, read, file, deny
+p, ` + projectName + `_t, /etc/passwd, write, file, deny
+
+# Type transition example (optional)
+# t, ` + projectName + `_t, tmp_t, file, ` + projectName + `_tmp_t
+
+# Role relations example (optional)
+# g, user_u, user_r
+# g2, ` + projectName + `_t, domain
+`
+
+	// Template README
+	readmeTemplate := `# ` + projectName + ` PML Project
+
+This is a SELinux policy project using Casbin PML.
+
+## Files
+
+- **model.conf**: PML model definition
+- **policy.csv**: PML policy rules
+- **output/**: Generated SELinux policy files
+
+## Usage
+
+### Compile the policy
+` + "```bash" + `
+pml2selinux compile -m model.conf -p policy.csv -o output
+` + "```" + `
+
+### Validate the policy
+` + "```bash" + `
+pml2selinux validate -m model.conf -p policy.csv
+` + "```" + `
+
+### Analyze the policy
+` + "```bash" + `
+pml2selinux analyze -m model.conf -p policy.csv
+` + "```" + `
+
+### Install the generated policy
+` + "```bash" + `
+cd output
+checkmodule -M -m -o ` + projectName + `.mod ` + projectName + `.te
+semodule_package -o ` + projectName + `.pp -m ` + projectName + `.mod -fc ` + projectName + `.fc
+sudo semodule -i ` + projectName + `.pp
+` + "```" + `
+
+## Documentation
+
+For more information, see the [PML to SELinux documentation](https://github.com/cici0602/pml-to-selinux).
+`
+
+	// Write model.conf
+	modelPath := fmt.Sprintf("%s/model.conf", projectName)
+	if err := os.WriteFile(modelPath, []byte(modelTemplate), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to write model.conf: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Write policy.csv
+	policyPath := fmt.Sprintf("%s/policy.csv", projectName)
+	if err := os.WriteFile(policyPath, []byte(policyTemplate), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to write policy.csv: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Write README.md
+	readmePath := fmt.Sprintf("%s/README.md", projectName)
+	if err := os.WriteFile(readmePath, []byte(readmeTemplate), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to write README.md: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Create output directory
+	outputPath := fmt.Sprintf("%s/output", projectName)
+	if err := os.MkdirAll(outputPath, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Failed to create output directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Project created successfully!\n\n")
+	fmt.Printf("Project structure:\n")
+	fmt.Printf("  %s/\n", projectName)
+	fmt.Printf("  ├── model.conf   (PML model)\n")
+	fmt.Printf("  ├── policy.csv   (PML policies)\n")
+	fmt.Printf("  ├── README.md    (Documentation)\n")
+	fmt.Printf("  └── output/      (Generated files)\n\n")
+	fmt.Printf("Next steps:\n")
+	fmt.Printf("  cd %s\n", projectName)
+	fmt.Printf("  pml2selinux compile -m model.conf -p policy.csv\n")
 }

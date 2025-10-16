@@ -1,0 +1,23 @@
+# Example policy for myapp
+# Format: p, subject, object, action, class, effect
+
+# Allow myapp_t to read config files
+p, myapp_t, /etc/myapp/*, read, file, allow
+
+# Allow myapp_t to write log files
+p, myapp_t, /var/log/myapp/*, write, file, allow
+
+# Allow myapp_t to manage data files
+p, myapp_t, /var/lib/myapp/*, read, file, allow
+p, myapp_t, /var/lib/myapp/*, write, file, allow
+
+# Deny myapp_t from accessing sensitive files
+p, myapp_t, /etc/shadow, read, file, deny
+p, myapp_t, /etc/passwd, write, file, deny
+
+# Type transition example (optional)
+# t, myapp_t, tmp_t, file, myapp_tmp_t
+
+# Role relations example (optional)
+# g, user_u, user_r
+# g2, myapp_t, domain

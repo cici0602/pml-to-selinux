@@ -1,0 +1,21 @@
+# Example policy demonstrating type_transition support
+# This shows how a process creates files with specific types
+
+# Allow httpd_t to read and write config files
+p, httpd_t, /etc/httpd/*, read, file, allow
+p, httpd_t, /var/www/*, read, file, allow
+p, httpd_t, /var/www/*, write, file, allow
+
+# Allow httpd_t to manage log files
+p, httpd_t, /var/log/httpd/*, write, file, allow
+
+# Type transition: when httpd_t creates a file in tmp_t, it becomes httpd_tmp_t
+t, httpd_t, tmp_t, file, httpd_tmp_t
+
+# Type transition: when httpd_t creates a dir in var_t, it becomes httpd_var_t
+t, httpd_t, var_t, dir, httpd_var_t
+
+# Allow httpd_t to work with its own temporary files
+p, httpd_t, httpd_tmp_t, read, file, allow
+p, httpd_t, httpd_tmp_t, write, file, allow
+p, httpd_t, httpd_tmp_t, delete, file, allow
