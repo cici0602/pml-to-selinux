@@ -11,9 +11,9 @@ import (
 // TestBooleanGeneration tests the generation of booleans
 func TestBooleanGeneration(t *testing.T) {
 	decoded := &models.DecodedPML{
-		Model: &models.PMLModel{},
-		Policies: []models.DecodedPolicy{},
-		Roles: []models.RoleRelation{},
+		Model:          &models.PMLModel{},
+		Policies:       []models.DecodedPolicy{},
+		Roles:          []models.RoleRelation{},
 		TypeAttributes: []models.RoleRelation{},
 		Booleans: []models.DecodedBoolean{
 			{Name: "httpd_enable_homedirs", DefaultValue: false},
@@ -38,19 +38,19 @@ func TestMacroGeneration(t *testing.T) {
 		Policies: []models.DecodedPolicy{
 			{
 				Policy: models.Policy{
-					Type: "p",
+					Type:    "p",
 					Subject: "my_app",
-					Object: "/data/app/*",
-					Action: "read",
-					Class: "file",
-					Effect: "allow",
+					Object:  "/data/app/*",
+					Action:  "read",
+					Class:   "file",
+					Effect:  "allow",
 				},
 			},
 		},
-		Roles: []models.RoleRelation{},
+		Roles:          []models.RoleRelation{},
 		TypeAttributes: []models.RoleRelation{},
-		Booleans: []models.DecodedBoolean{},
-		Transitions: []models.TransitionInfo{},
+		Booleans:       []models.DecodedBoolean{},
+		Transitions:    []models.TransitionInfo{},
 	}
 
 	gen := NewGenerator(decoded, "my_app")

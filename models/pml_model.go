@@ -61,11 +61,11 @@ type ParsedPML struct {
 // DecodedPML contains decoded PML data with SELinux-specific structures
 // This is created by decoding the standard ParsedPML
 type DecodedPML struct {
-	Model              *PMLModel
-	Policies           []DecodedPolicy  // Decoded policies with conditions
-	Roles              []RoleRelation   // Standard role relations (g)
-	TypeAttributes     []RoleRelation   // Type attributes (g2 without bool: prefix)
-	Booleans           []DecodedBoolean // Decoded booleans (g2 with bool: prefix)
-	Transitions        []TransitionInfo // Extracted type transitions (from p2)
-	ConditionalPolicies []DecodedPolicy // Policies with conditions
+	Model               *PMLModel
+	Policies            []DecodedPolicy  // Decoded policies with conditions
+	Roles               []RoleRelation   // Standard role relations (g)
+	TypeAttributes      []RoleRelation   // Type attributes (g2 without bool: prefix)
+	Booleans            []DecodedBoolean // Decoded booleans (g2 with bool: prefix)
+	Transitions         []TransitionInfo // Extracted type transitions (from p2)
+	ConditionalPolicies []DecodedPolicy  // Policies with conditions
 }

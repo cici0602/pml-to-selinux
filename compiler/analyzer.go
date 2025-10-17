@@ -211,7 +211,7 @@ func isValidPathChar(ch rune) bool {
 		(ch >= 'A' && ch <= 'Z') ||
 		(ch >= '0' && ch <= '9') ||
 		ch == '/' || ch == '*' || ch == '.' || ch == '-' || ch == '_' ||
-		ch == '?' || ch == '='  // Allow for condition encoding like ?cond=name
+		ch == '?' || ch == '=' // Allow for condition encoding like ?cond=name
 }
 
 // detectConflicts finds conflicting allow and deny rules

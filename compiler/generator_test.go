@@ -43,11 +43,11 @@ func TestGenerator_Generate(t *testing.T) {
 			Matchers: "r.sub == p.sub && r.obj == p.obj && r.act == p.act && r.cls == p.cls",
 			Effect:   "some(where (p.eft == allow))",
 		},
-		Policies:        decodedPolicies,
-		Roles:           []models.RoleRelation{},
-		TypeAttributes:  []models.RoleRelation{},
-		Booleans:        []models.DecodedBoolean{},
-		Transitions:     []models.TransitionInfo{},
+		Policies:       decodedPolicies,
+		Roles:          []models.RoleRelation{},
+		TypeAttributes: []models.RoleRelation{},
+		Booleans:       []models.DecodedBoolean{},
+		Transitions:    []models.TransitionInfo{},
 	}
 
 	generator := NewGenerator(decoded, "httpd")
@@ -93,10 +93,10 @@ func TestGenerator_InferModuleName(t *testing.T) {
 				},
 			},
 		},
-		Roles:           []models.RoleRelation{},
-		TypeAttributes:  []models.RoleRelation{},
-		Booleans:        []models.DecodedBoolean{},
-		Transitions:     []models.TransitionInfo{},
+		Roles:          []models.RoleRelation{},
+		TypeAttributes: []models.RoleRelation{},
+		Booleans:       []models.DecodedBoolean{},
+		Transitions:    []models.TransitionInfo{},
 	}
 
 	generator := NewGenerator(decoded, "")
@@ -113,12 +113,12 @@ func TestGenerator_InferModuleName(t *testing.T) {
 
 func TestGenerator_ActionToPermissions(t *testing.T) {
 	decoded := &models.DecodedPML{
-		Model:           &models.PMLModel{},
-		Policies:        []models.DecodedPolicy{},
-		Roles:           []models.RoleRelation{},
-		TypeAttributes:  []models.RoleRelation{},
-		Booleans:        []models.DecodedBoolean{},
-		Transitions:     []models.TransitionInfo{},
+		Model:          &models.PMLModel{},
+		Policies:       []models.DecodedPolicy{},
+		Roles:          []models.RoleRelation{},
+		TypeAttributes: []models.RoleRelation{},
+		Booleans:       []models.DecodedBoolean{},
+		Transitions:    []models.TransitionInfo{},
 	}
 	gen := NewGenerator(decoded, "test")
 

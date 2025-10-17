@@ -43,7 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to decode PML: %v", err)
 	}
-	fmt.Printf("✓ Decoded %d policies, %d transitions, %d booleans\n\n", 
+	fmt.Printf("✓ Decoded %d policies, %d transitions, %d booleans\n\n",
 		len(decoded.Policies), len(decoded.Transitions), len(decoded.Booleans))
 
 	// Step 2: Analyze PML

@@ -116,12 +116,12 @@ func TestValidateModel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decoded := &models.DecodedPML{
-				Model:           tt.model,
-				Policies:        []models.DecodedPolicy{},
-				Roles:           []models.RoleRelation{},
-				TypeAttributes:  []models.RoleRelation{},
-				Booleans:        []models.DecodedBoolean{},
-				Transitions:     []models.TransitionInfo{},
+				Model:          tt.model,
+				Policies:       []models.DecodedPolicy{},
+				Roles:          []models.RoleRelation{},
+				TypeAttributes: []models.RoleRelation{},
+				Booleans:       []models.DecodedBoolean{},
+				Transitions:    []models.TransitionInfo{},
 			}
 			analyzer := NewAnalyzer(decoded)
 
@@ -230,11 +230,11 @@ func TestValidatePolicies(t *testing.T) {
 					Matchers:          "m",
 					Effect:            "e",
 				},
-				Policies:        decodedPolicies,
-				Roles:           []models.RoleRelation{},
-				TypeAttributes:  []models.RoleRelation{},
-				Booleans:        []models.DecodedBoolean{},
-				Transitions:     []models.TransitionInfo{},
+				Policies:       decodedPolicies,
+				Roles:          []models.RoleRelation{},
+				TypeAttributes: []models.RoleRelation{},
+				Booleans:       []models.DecodedBoolean{},
+				Transitions:    []models.TransitionInfo{},
 			}
 			analyzer := NewAnalyzer(decoded)
 
@@ -326,11 +326,11 @@ func TestDetectConflicts(t *testing.T) {
 					Matchers:          "m",
 					Effect:            "e",
 				},
-				Policies:        decodedPolicies,
-				Roles:           []models.RoleRelation{},
-				TypeAttributes:  []models.RoleRelation{},
-				Booleans:        []models.DecodedBoolean{},
-				Transitions:     []models.TransitionInfo{},
+				Policies:       decodedPolicies,
+				Roles:          []models.RoleRelation{},
+				TypeAttributes: []models.RoleRelation{},
+				Booleans:       []models.DecodedBoolean{},
+				Transitions:    []models.TransitionInfo{},
 			}
 			analyzer := NewAnalyzer(decoded)
 
@@ -379,11 +379,11 @@ func TestGenerateStats(t *testing.T) {
 			Matchers:          "m",
 			Effect:            "e",
 		},
-		Policies:        decodedPolicies,
-		Roles:           roles,
-		TypeAttributes:  []models.RoleRelation{},
-		Booleans:        []models.DecodedBoolean{},
-		Transitions:     []models.TransitionInfo{},
+		Policies:       decodedPolicies,
+		Roles:          roles,
+		TypeAttributes: []models.RoleRelation{},
+		Booleans:       []models.DecodedBoolean{},
+		Transitions:    []models.TransitionInfo{},
 	}
 
 	analyzer := NewAnalyzer(decoded)
@@ -461,11 +461,11 @@ func TestAnalyzeIntegration(t *testing.T) {
 			Matchers: "r.sub == p.sub && r.obj == p.obj",
 			Effect:   "some(where (p.eft == allow))",
 		},
-		Policies:        decodedPolicies,
-		Roles:           roles,
-		TypeAttributes:  []models.RoleRelation{},
-		Booleans:        []models.DecodedBoolean{},
-		Transitions:     []models.TransitionInfo{},
+		Policies:       decodedPolicies,
+		Roles:          roles,
+		TypeAttributes: []models.RoleRelation{},
+		Booleans:       []models.DecodedBoolean{},
+		Transitions:    []models.TransitionInfo{},
 	}
 
 	analyzer := NewAnalyzer(decoded)
@@ -522,12 +522,12 @@ func TestPathsOverlap(t *testing.T) {
 	}
 
 	analyzer := NewAnalyzer(&models.DecodedPML{
-		Model:           &models.PMLModel{},
-		Policies:        []models.DecodedPolicy{},
-		Roles:           []models.RoleRelation{},
-		TypeAttributes:  []models.RoleRelation{},
-		Booleans:        []models.DecodedBoolean{},
-		Transitions:     []models.TransitionInfo{},
+		Model:          &models.PMLModel{},
+		Policies:       []models.DecodedPolicy{},
+		Roles:          []models.RoleRelation{},
+		TypeAttributes: []models.RoleRelation{},
+		Booleans:       []models.DecodedBoolean{},
+		Transitions:    []models.TransitionInfo{},
 	})
 
 	for _, tt := range tests {
