@@ -10,7 +10,7 @@ import (
 
 // Generator orchestrates the conversion from PML to SELinux policy
 type Generator struct {
-	pml          *models.ParsedPML
+	decoded      *models.DecodedPML
 	moduleName   string
 	typeMapper   *mapping.TypeMapper
 	pathMapper   *mapping.PathMapper
@@ -18,10 +18,10 @@ type Generator struct {
 	actionMapper *mapping.ActionMapper
 }
 
-// NewGenerator creates a new Generator instance
-func NewGenerator(pml *models.ParsedPML, moduleName string) *Generator {
+// NewGenerator creates a new Generator instance from decoded PML
+func NewGenerator(decoded *models.DecodedPML, moduleName string) *Generator {
 	return &Generator{
-		pml:          pml,
+		decoded:      decoded,
 		moduleName:   moduleName,
 		typeMapper:   mapping.NewTypeMapper(moduleName),
 		pathMapper:   mapping.NewPathMapper(),
@@ -30,10 +30,10 @@ func NewGenerator(pml *models.ParsedPML, moduleName string) *Generator {
 	}
 }
 
-// Generate converts parsed PML to SELinux policy
+// Generate converts decoded PML to SELinux policy
 func (g *Generator) Generate() (*models.SELinuxPolicy, error) {
-	if g.pml == nil {
-		return nil, fmt.Errorf("parsed PML cannot be nil")
+	if g.decoded == nil {
+		return nil, fmt.Errorf("decoded PML cannot be nil")
 	}
 
 	// Infer module name if not provided
@@ -50,6 +50,15 @@ func (g *Generator) Generate() (*models.SELinuxPolicy, error) {
 		DenyRules:    make([]models.DenyRule, 0),
 		Transitions:  make([]models.TypeTransition, 0),
 		FileContexts: make([]models.FileContext, 0),
+		Booleans:     make([]models.BooleanDeclaration, 0),
+	}
+
+	// Convert booleans
+	for _, boolean := range g.decoded.Booleans {
+		policy.Booleans = append(policy.Booleans, models.BooleanDeclaration{
+			Name:         boolean.Name,
+			DefaultValue: boolean.DefaultValue,
+		})
 	}
 
 	// Extract types from subjects and objects
@@ -81,8 +90,8 @@ func (g *Generator) Generate() (*models.SELinuxPolicy, error) {
 // inferModuleName infers module name from policy structure
 func (g *Generator) inferModuleName() string {
 	// Try to extract from first policy subject
-	if len(g.pml.Policies) > 0 {
-		subject := g.pml.Policies[0].Subject
+	if len(g.decoded.Policies) > 0 {
+		subject := g.decoded.Policies[0].Subject
 		// Clean and sanitize the subject name
 		name := strings.ToLower(subject)
 		name = strings.ReplaceAll(name, "_process", "")
@@ -96,24 +105,32 @@ func (g *Generator) inferModuleName() string {
 func (g *Generator) extractTypes() map[string]bool {
 	types := make(map[string]bool)
 
-	for _, policy := range g.pml.Policies {
+	for _, policy := range g.decoded.Policies {
 		// Add subject type
 		subjectType := g.typeMapper.SubjectToType(policy.Subject)
 		types[subjectType] = true
 
-		// Add object type from path
-		if strings.HasPrefix(policy.Object, "/") {
-			objectType := g.typeMapper.PathToType(policy.Object)
+		// Add object type from path (use decoded object without condition)
+		objPath := policy.Object
+		if strings.HasPrefix(objPath, "/") {
+			objectType := g.typeMapper.PathToType(objPath)
 			types[objectType] = true
 		}
+	}
+
+	// Add types from transitions
+	for _, trans := range g.decoded.Transitions {
+		types[trans.SourceType] = true
+		types[trans.TargetType] = true
+		types[trans.NewType] = true
 	}
 
 	return types
 }
 
-// convertPolicies converts PML policies to SELinux rules
+// convertPolicies converts decoded PML policies to SELinux rules
 func (g *Generator) convertPolicies(policy *models.SELinuxPolicy) error {
-	for _, pmlPolicy := range g.pml.Policies {
+	for _, pmlPolicy := range g.decoded.Policies {
 		sourceType := g.typeMapper.SubjectToType(pmlPolicy.Subject)
 
 		// Determine target type based on object
@@ -149,9 +166,9 @@ func (g *Generator) convertPolicies(policy *models.SELinuxPolicy) error {
 	return nil
 }
 
-// convertTransitions converts PML transitions to SELinux type_transition rules
+// convertTransitions converts decoded transitions to SELinux type_transition rules
 func (g *Generator) convertTransitions(policy *models.SELinuxPolicy) error {
-	for _, trans := range g.pml.Transitions {
+	for _, trans := range g.decoded.Transitions {
 		// Ensure transition types are added to policy
 		selinuxTrans := models.TypeTransition{
 			SourceType: trans.SourceType,
@@ -235,7 +252,7 @@ func (g *Generator) actionToPermissions(action string) (string, []string) {
 func (g *Generator) generateFileContexts(policy *models.SELinuxPolicy) error {
 	seenPaths := make(map[string]bool)
 
-	for _, pmlPolicy := range g.pml.Policies {
+	for _, pmlPolicy := range g.decoded.Policies {
 		// Only generate contexts for file paths
 		if !strings.HasPrefix(pmlPolicy.Object, "/") {
 			continue

@@ -34,7 +34,7 @@ func NewParser(modelPath, policyPath string) *Parser {
 	}
 }
 
-// Parse parses both model and policy files and returns ParsedPML
+// Parse parses both model and policy files and returns ParsedPML in standard Casbin format
 func (p *Parser) Parse() (*models.ParsedPML, error) {
 	// Parse model file
 	model, err := p.parseModel()
@@ -42,17 +42,110 @@ func (p *Parser) Parse() (*models.ParsedPML, error) {
 		return nil, err
 	}
 
-	// Parse policy file
-	policies, roles, transitions, err := p.parsePolicy()
+	// Parse policy file - now returns standard format
+	policies, roles, err := p.parsePolicy()
 	if err != nil {
 		return nil, err
 	}
 
 	return &models.ParsedPML{
-		Model:       model,
-		Policies:    policies,
-		Roles:       roles,
-		Transitions: transitions,
+		Model:    model,
+		Policies: policies,
+		Roles:    roles,
+	}, nil
+}
+
+// Decode decodes standard ParsedPML into SELinux-specific DecodedPML
+func (p *Parser) Decode(pml *models.ParsedPML) (*models.DecodedPML, error) {
+	decoded := &models.DecodedPML{
+		Model:               pml.Model,
+		Policies:            make([]models.DecodedPolicy, 0),
+		Roles:               make([]models.RoleRelation, 0),
+		TypeAttributes:      make([]models.RoleRelation, 0),
+		Booleans:            make([]models.DecodedBoolean, 0),
+		Transitions:         make([]models.TransitionInfo, 0),
+		ConditionalPolicies: make([]models.DecodedPolicy, 0),
+	}
+
+	// Decode policies
+	for _, policy := range pml.Policies {
+		decodedPolicy, err := p.decodePolicy(&policy)
+		if err != nil {
+			return nil, err
+		}
+
+		decoded.Policies = append(decoded.Policies, *decodedPolicy)
+
+		// Categorize special policies
+		if decodedPolicy.Condition != "" {
+			decoded.ConditionalPolicies = append(decoded.ConditionalPolicies, *decodedPolicy)
+		}
+
+		if decodedPolicy.IsTransition && decodedPolicy.TransitionInfo != nil {
+			decoded.Transitions = append(decoded.Transitions, *decodedPolicy.TransitionInfo)
+		}
+	}
+
+	// Decode roles and booleans
+	for _, role := range pml.Roles {
+		if role.Type == "g2" && strings.HasPrefix(role.Role, "bool:") {
+			// This is a boolean definition
+			boolean, err := p.decodeBoolean(&role)
+			if err != nil {
+				return nil, err
+			}
+			decoded.Booleans = append(decoded.Booleans, *boolean)
+		} else if role.Type == "g" {
+			// Standard role relation
+			decoded.Roles = append(decoded.Roles, role)
+		} else if role.Type == "g2" {
+			// Type attribute
+			decoded.TypeAttributes = append(decoded.TypeAttributes, role)
+		}
+	}
+
+	return decoded, nil
+}
+
+// decodePolicy decodes a standard policy into DecodedPolicy
+func (p *Parser) decodePolicy(policy *models.Policy) (*models.DecodedPolicy, error) {
+	decoded := &models.DecodedPolicy{
+		Policy: *policy,
+	}
+
+	// Check if object contains a condition (?cond=)
+	if strings.Contains(policy.Object, "?cond=") {
+		parts := strings.SplitN(policy.Object, "?cond=", 2)
+		decoded.Object = parts[0]
+		decoded.Condition = parts[1]
+	}
+
+	// Check if this is a type transition (p2 with action="transition")
+	if policy.Type == "p2" && policy.Action == "transition" {
+		decoded.IsTransition = true
+		decoded.TransitionInfo = &models.TransitionInfo{
+			SourceType: policy.Subject,
+			TargetType: policy.Object,
+			Class:      policy.Class,
+			NewType:    policy.Effect,
+		}
+	}
+
+	return decoded, nil
+}
+
+// decodeBoolean decodes a g2 role relation into a boolean definition
+func (p *Parser) decodeBoolean(relation *models.RoleRelation) (*models.DecodedBoolean, error) {
+	if !strings.HasPrefix(relation.Role, "bool:") {
+		return nil, fmt.Errorf("not a boolean definition: %s", relation.Role)
+	}
+
+	value := strings.TrimPrefix(relation.Role, "bool:")
+	boolValue := value == "true"
+
+	return &models.DecodedBoolean{
+		Name:         relation.Member,
+		DefaultValue: boolValue,
 	}, nil
 }
 
@@ -152,17 +245,16 @@ func parseDefinitionValue(value string) []string {
 	return result
 }
 
-// parsePolicy parses the CSV policy file
-func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, []models.Transition, error) {
+// parsePolicy parses the CSV policy file in standard Casbin format
+func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, error) {
 	file, err := os.Open(p.policyPath)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to open policy file: %w", err)
+		return nil, nil, fmt.Errorf("failed to open policy file: %w", err)
 	}
 	defer file.Close()
 
 	var policies []models.Policy
 	var roles []models.RoleRelation
-	var transitions []models.Transition
 
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
@@ -186,16 +278,17 @@ func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, []models
 		ruleType := fields[0]
 
 		switch ruleType {
-		case "p":
-			// Policy rule: p, subject, object, action, class, effect
+		case "p", "p2", "p3":
+			// Standard policy rule: p, subject, object, action, class, effect
 			if len(fields) != 6 {
-				return nil, nil, nil, &ParseError{
+				return nil, nil, &ParseError{
 					File:    p.policyPath,
 					Line:    lineNum,
 					Message: fmt.Sprintf("policy rule expects 6 fields, got %d: %s", len(fields), line),
 				}
 			}
 			policies = append(policies, models.Policy{
+				Type:    ruleType,
 				Subject: strings.TrimSpace(fields[1]),
 				Object:  strings.TrimSpace(fields[2]),
 				Action:  strings.TrimSpace(fields[3]),
@@ -203,50 +296,35 @@ func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, []models
 				Effect:  strings.TrimSpace(fields[5]),
 			})
 
-		case "t":
-			// Type transition: t, source_type, target_type, class, new_type
-			if len(fields) != 5 {
-				return nil, nil, nil, &ParseError{
-					File:    p.policyPath,
-					Line:    lineNum,
-					Message: fmt.Sprintf("type transition expects 5 fields, got %d: %s", len(fields), line),
-				}
-			}
-			transitions = append(transitions, models.Transition{
-				SourceType: strings.TrimSpace(fields[1]),
-				TargetType: strings.TrimSpace(fields[2]),
-				Class:      strings.TrimSpace(fields[3]),
-				NewType:    strings.TrimSpace(fields[4]),
-			})
-
 		case "g", "g2", "g3":
-			// Role relation: g, member, role
+			// Standard role relation: g, member, role
 			if len(fields) != 3 {
-				return nil, nil, nil, &ParseError{
+				return nil, nil, &ParseError{
 					File:    p.policyPath,
 					Line:    lineNum,
 					Message: fmt.Sprintf("role relation expects 3 fields, got %d: %s", len(fields), line),
 				}
 			}
 			roles = append(roles, models.RoleRelation{
+				Type:   ruleType,
 				Member: strings.TrimSpace(fields[1]),
 				Role:   strings.TrimSpace(fields[2]),
 			})
 
 		default:
-			return nil, nil, nil, &ParseError{
+			return nil, nil, &ParseError{
 				File:    p.policyPath,
 				Line:    lineNum,
-				Message: fmt.Sprintf("unknown rule type: %s", ruleType),
+				Message: fmt.Sprintf("unknown rule type: %s (only p, p2, p3, g, g2, g3 are supported)", ruleType),
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading policy file: %w", err)
+		return nil, nil, fmt.Errorf("error reading policy file: %w", err)
 	}
 
-	return policies, roles, transitions, nil
+	return policies, roles, nil
 }
 
 // parseCSVLine parses a CSV line, handling simple quoted fields

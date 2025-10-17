@@ -115,12 +115,15 @@ func TestValidateModel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pml := &models.ParsedPML{
-				Model:    tt.model,
-				Policies: []models.Policy{},
-				Roles:    []models.RoleRelation{},
+			decoded := &models.DecodedPML{
+				Model:           tt.model,
+				Policies:        []models.DecodedPolicy{},
+				Roles:           []models.RoleRelation{},
+				TypeAttributes:  []models.RoleRelation{},
+				Booleans:        []models.DecodedBoolean{},
+				Transitions:     []models.TransitionInfo{},
 			}
-			analyzer := NewAnalyzer(pml)
+			analyzer := NewAnalyzer(decoded)
 
 			err := analyzer.validateModel()
 
@@ -149,7 +152,7 @@ func TestValidatePolicies(t *testing.T) {
 		{
 			name: "valid policies",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
+				{Type: "p", Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
 				{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Class: "file", Effect: "allow"},
 				{Subject: "httpd_t", Object: "/usr/bin/*", Action: "write", Class: "file", Effect: "deny"},
 			},
@@ -214,17 +217,26 @@ func TestValidatePolicies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pml := &models.ParsedPML{
+			// Convert policies to decoded policies
+			decodedPolicies := make([]models.DecodedPolicy, len(tt.policies))
+			for i, policy := range tt.policies {
+				decodedPolicies[i] = models.DecodedPolicy{Policy: policy}
+			}
+
+			decoded := &models.DecodedPML{
 				Model: &models.PMLModel{
 					RequestDefinition: map[string][]string{"r": {"sub", "obj", "act", "class"}},
 					PolicyDefinition:  map[string][]string{"p": {"sub", "obj", "act", "class", "eft"}},
 					Matchers:          "m",
 					Effect:            "e",
 				},
-				Policies: tt.policies,
-				Roles:    []models.RoleRelation{},
+				Policies:        decodedPolicies,
+				Roles:           []models.RoleRelation{},
+				TypeAttributes:  []models.RoleRelation{},
+				Booleans:        []models.DecodedBoolean{},
+				Transitions:     []models.TransitionInfo{},
 			}
-			analyzer := NewAnalyzer(pml)
+			analyzer := NewAnalyzer(decoded)
 
 			err := analyzer.validatePolicies()
 
@@ -301,17 +313,26 @@ func TestDetectConflicts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pml := &models.ParsedPML{
+			// Convert policies to decoded policies
+			decodedPolicies := make([]models.DecodedPolicy, len(tt.policies))
+			for i, policy := range tt.policies {
+				decodedPolicies[i] = models.DecodedPolicy{Policy: policy}
+			}
+
+			decoded := &models.DecodedPML{
 				Model: &models.PMLModel{
 					RequestDefinition: map[string][]string{"r": {"sub", "obj", "act", "class"}},
 					PolicyDefinition:  map[string][]string{"p": {"sub", "obj", "act", "class", "eft"}},
 					Matchers:          "m",
 					Effect:            "e",
 				},
-				Policies: tt.policies,
-				Roles:    []models.RoleRelation{},
+				Policies:        decodedPolicies,
+				Roles:           []models.RoleRelation{},
+				TypeAttributes:  []models.RoleRelation{},
+				Booleans:        []models.DecodedBoolean{},
+				Transitions:     []models.TransitionInfo{},
 			}
-			analyzer := NewAnalyzer(pml)
+			analyzer := NewAnalyzer(decoded)
 
 			conflicts := analyzer.detectConflicts()
 
@@ -345,18 +366,27 @@ func TestGenerateStats(t *testing.T) {
 		{Member: "system_u", Role: "system_r"},
 	}
 
-	pml := &models.ParsedPML{
+	// Convert policies to decoded policies
+	decodedPolicies := make([]models.DecodedPolicy, len(policies))
+	for i, policy := range policies {
+		decodedPolicies[i] = models.DecodedPolicy{Policy: policy}
+	}
+
+	decoded := &models.DecodedPML{
 		Model: &models.PMLModel{
 			RequestDefinition: map[string][]string{"r": {"sub", "obj", "act", "class"}},
 			PolicyDefinition:  map[string][]string{"p": {"sub", "obj", "act", "class", "eft"}},
 			Matchers:          "m",
 			Effect:            "e",
 		},
-		Policies: policies,
-		Roles:    roles,
+		Policies:        decodedPolicies,
+		Roles:           roles,
+		TypeAttributes:  []models.RoleRelation{},
+		Booleans:        []models.DecodedBoolean{},
+		Transitions:     []models.TransitionInfo{},
 	}
 
-	analyzer := NewAnalyzer(pml)
+	analyzer := NewAnalyzer(decoded)
 	analyzer.generateStats()
 	stats := analyzer.GetStats()
 
@@ -401,7 +431,23 @@ func TestGenerateStats(t *testing.T) {
 
 // TestAnalyzeIntegration tests the full analysis workflow
 func TestAnalyzeIntegration(t *testing.T) {
-	pml := &models.ParsedPML{
+	policies := []models.Policy{
+		{Type: "p", Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
+		{Type: "p", Subject: "httpd_t", Object: "/var/www/*", Action: "write", Class: "file", Effect: "allow"},
+		{Type: "p", Subject: "httpd_t", Object: "/var/log/*", Action: "write", Class: "file", Effect: "allow"},
+	}
+
+	roles := []models.RoleRelation{
+		{Type: "g", Member: "user_u", Role: "user_r"},
+	}
+
+	// Convert policies to decoded policies
+	decodedPolicies := make([]models.DecodedPolicy, len(policies))
+	for i, policy := range policies {
+		decodedPolicies[i] = models.DecodedPolicy{Policy: policy}
+	}
+
+	decoded := &models.DecodedPML{
 		Model: &models.PMLModel{
 			RequestDefinition: map[string][]string{
 				"r": {"sub", "obj", "act", "class"},
@@ -415,17 +461,14 @@ func TestAnalyzeIntegration(t *testing.T) {
 			Matchers: "r.sub == p.sub && r.obj == p.obj",
 			Effect:   "some(where (p.eft == allow))",
 		},
-		Policies: []models.Policy{
-			{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
-			{Subject: "httpd_t", Object: "/var/www/*", Action: "write", Class: "file", Effect: "allow"},
-			{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Class: "file", Effect: "allow"},
-		},
-		Roles: []models.RoleRelation{
-			{Member: "user_u", Role: "user_r"},
-		},
+		Policies:        decodedPolicies,
+		Roles:           roles,
+		TypeAttributes:  []models.RoleRelation{},
+		Booleans:        []models.DecodedBoolean{},
+		Transitions:     []models.TransitionInfo{},
 	}
 
-	analyzer := NewAnalyzer(pml)
+	analyzer := NewAnalyzer(decoded)
 	err := analyzer.Analyze()
 
 	if err != nil {
@@ -478,7 +521,14 @@ func TestPathsOverlap(t *testing.T) {
 		},
 	}
 
-	analyzer := NewAnalyzer(&models.ParsedPML{})
+	analyzer := NewAnalyzer(&models.DecodedPML{
+		Model:           &models.PMLModel{},
+		Policies:        []models.DecodedPolicy{},
+		Roles:           []models.RoleRelation{},
+		TypeAttributes:  []models.RoleRelation{},
+		Booleans:        []models.DecodedBoolean{},
+		Transitions:     []models.TransitionInfo{},
+	})
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

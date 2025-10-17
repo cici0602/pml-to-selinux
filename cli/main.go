@@ -152,11 +152,25 @@ func runCompile(cmd *cobra.Command, args []string) {
 		fmt.Printf("✓ Successfully parsed model and %d policies\n", len(pml.Policies))
 	}
 
-	// 2. Analyze and validate
+	// 2. Decode standard PML to SELinux structures
+	if verbose {
+		fmt.Println("⟳ Decoding PML to SELinux structures...")
+	}
+	decoded, err := parser.Decode(pml)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Decoding error: %v\n", err)
+		os.Exit(1)
+	}
+	if verbose {
+		fmt.Printf("✓ Decoded %d policies, %d transitions, %d booleans\n",
+			len(decoded.Policies), len(decoded.Transitions), len(decoded.Booleans))
+	}
+
+	// 3. Analyze and validate
 	if verbose {
 		fmt.Println("⟳ Analyzing policy...")
 	}
-	analyzer := compiler.NewAnalyzer(pml)
+	analyzer := compiler.NewAnalyzer(decoded)
 	err = analyzer.Analyze()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Analysis error: %v\n", err)
@@ -171,11 +185,11 @@ func runCompile(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// 3. Generate SELinux policy
+	// 4. Generate SELinux policy
 	if verbose {
 		fmt.Println("⟳ Generating SELinux policy...")
 	}
-	generator := compiler.NewGenerator(pml, moduleName)
+	generator := compiler.NewGenerator(decoded, moduleName)
 	selinuxPolicy, err := generator.Generate()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Generation error: %v\n", err)
@@ -287,8 +301,15 @@ func runValidate(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Decode
+	decoded, err := parser.Decode(pml)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Decode error: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Analyze
-	analyzer := compiler.NewAnalyzer(pml)
+	analyzer := compiler.NewAnalyzer(decoded)
 	err = analyzer.Analyze()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Validation failed: %v\n", err)
@@ -321,8 +342,15 @@ func runAnalyze(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Decode
+	decoded, err := parser.Decode(pml)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Decode error: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Analyze
-	analyzer := compiler.NewAnalyzer(pml)
+	analyzer := compiler.NewAnalyzer(decoded)
 	err = analyzer.Analyze()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Analysis error: %v\n", err)
@@ -373,32 +401,42 @@ func runAnalyze(cmd *cobra.Command, args []string) {
 func runDiff(cmd *cobra.Command, args []string) {
 	fmt.Println("Comparing PML policies...")
 
-	// Parse first policy
+	// Parse and decode first policy
 	parser1 := compiler.NewParser(modelPath, policyPath)
 	pml1, err := parser1.Parse()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Error parsing first policy: %v\n", err)
 		os.Exit(1)
 	}
+	decoded1, err := parser1.Decode(pml1)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Error decoding first policy: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Generate first SELinux policy
-	gen1 := compiler.NewGenerator(pml1, "")
+	gen1 := compiler.NewGenerator(decoded1, "")
 	policy1, err := gen1.Generate()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Error generating first policy: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Parse second policy
+	// Parse and decode second policy
 	parser2 := compiler.NewParser(modelPath2, policyPath2)
 	pml2, err := parser2.Parse()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Error parsing second policy: %v\n", err)
 		os.Exit(1)
 	}
+	decoded2, err := parser2.Decode(pml2)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ Error decoding second policy: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Generate second SELinux policy
-	gen2 := compiler.NewGenerator(pml2, "")
+	gen2 := compiler.NewGenerator(decoded2, "")
 	policy2, err := gen2.Generate()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "✗ Error generating second policy: %v\n", err)

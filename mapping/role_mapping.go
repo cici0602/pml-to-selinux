@@ -185,7 +185,7 @@ type RoleDomainAssoc struct {
 
 // GenerateRoleTransitionRules generates role_transition rules
 // Format: role_transition source_role target_type : process new_role;
-func (rm *RoleMapper) GenerateRoleTransitionRules(transitions []models.Transition) []string {
+func (rm *RoleMapper) GenerateRoleTransitionRules(transitions []models.TransitionInfo) []string {
 	rules := []string{}
 
 	for _, trans := range transitions {

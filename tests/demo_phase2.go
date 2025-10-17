@@ -37,9 +37,18 @@ func main() {
 	}
 	fmt.Printf("✓ Parsed %d policies\n\n", len(pml.Policies))
 
+	// Step 1.5: Decode PML
+	fmt.Println("Step 1.5: Decoding PML...")
+	decoded, err := parser.Decode(pml)
+	if err != nil {
+		log.Fatalf("Failed to decode PML: %v", err)
+	}
+	fmt.Printf("✓ Decoded %d policies, %d transitions, %d booleans\n\n", 
+		len(decoded.Policies), len(decoded.Transitions), len(decoded.Booleans))
+
 	// Step 2: Analyze PML
 	fmt.Println("Step 2: Analyzing PML...")
-	analyzer := compiler.NewAnalyzer(pml)
+	analyzer := compiler.NewAnalyzer(decoded)
 	if err := analyzer.Analyze(); err != nil {
 		log.Fatalf("Failed to analyze PML: %v", err)
 	}

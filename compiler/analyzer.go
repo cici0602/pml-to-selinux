@@ -8,9 +8,9 @@ import (
 	"github.com/cici0602/pml-to-selinux/models"
 )
 
-// Analyzer performs semantic analysis on parsed PML
+// Analyzer performs semantic analysis on decoded PML
 type Analyzer struct {
-	pml       *models.ParsedPML
+	decoded   *models.DecodedPML
 	errors    []error
 	stats     *AnalysisStats
 	conflicts []ConflictInfo
@@ -26,6 +26,8 @@ type AnalysisStats struct {
 	UniqueActions  int
 	Conflicts      int
 	RoleRelations  int
+	Transitions    int
+	Booleans       int
 	SubjectTypes   map[string]int // Count of rules per subject
 	ObjectPatterns map[string]int // Count of rules per object pattern
 	ActionTypes    map[string]int // Count of rules per action
@@ -33,16 +35,16 @@ type AnalysisStats struct {
 
 // ConflictInfo represents a policy conflict
 type ConflictInfo struct {
-	AllowRule models.Policy
-	DenyRule  models.Policy
+	AllowRule models.DecodedPolicy
+	DenyRule  models.DecodedPolicy
 	Reason    string
 }
 
 // NewAnalyzer creates a new analyzer instance
-func NewAnalyzer(pml *models.ParsedPML) *Analyzer {
+func NewAnalyzer(decoded *models.DecodedPML) *Analyzer {
 	return &Analyzer{
-		pml:    pml,
-		errors: make([]error, 0),
+		decoded: decoded,
+		errors:  make([]error, 0),
 		stats: &AnalysisStats{
 			SubjectTypes:   make(map[string]int),
 			ObjectPatterns: make(map[string]int),
@@ -81,7 +83,7 @@ func (a *Analyzer) Analyze() error {
 
 // validateModel checks if the model has all required sections
 func (a *Analyzer) validateModel() error {
-	model := a.pml.Model
+	model := a.decoded.Model
 
 	// Check request_definition
 	if len(model.RequestDefinition) == 0 {
@@ -128,7 +130,7 @@ func (a *Analyzer) validateModel() error {
 func (a *Analyzer) validatePolicies() error {
 	validEffects := map[string]bool{"allow": true, "deny": true}
 
-	for i, policy := range a.pml.Policies {
+	for i, policy := range a.decoded.Policies {
 		// Check if subject is not empty
 		if policy.Subject == "" {
 			return fmt.Errorf("policy rule %d: subject cannot be empty", i+1)
@@ -149,8 +151,10 @@ func (a *Analyzer) validatePolicies() error {
 			return fmt.Errorf("policy rule %d: class cannot be empty", i+1)
 		}
 
-		// Check if effect is valid
-		if !validEffects[policy.Effect] {
+		// Check if effect is valid (skip validation for transition rules)
+		if policy.Type == "p2" && policy.Action == "transition" {
+			// For transition rules, effect is actually the new_type, so don't validate it as allow/deny
+		} else if !validEffects[policy.Effect] {
 			return fmt.Errorf("policy rule %d: invalid effect '%s', must be 'allow' or 'deny'", i+1, policy.Effect)
 		}
 
@@ -167,7 +171,11 @@ func (a *Analyzer) validatePolicies() error {
 func (a *Analyzer) validatePathPattern(pattern string) error {
 	// Check if pattern starts with /
 	if !strings.HasPrefix(pattern, "/") {
-		// Allow special patterns like tcp_socket
+		// Allow port numbers (all digits)
+		if isAllDigits(pattern) {
+			return nil
+		}
+		// Allow special patterns like tcp_socket (contain underscore)
 		if !strings.Contains(pattern, "_") {
 			return fmt.Errorf("path pattern must start with '/' or be a valid object type")
 		}
@@ -184,12 +192,26 @@ func (a *Analyzer) validatePathPattern(pattern string) error {
 	return nil
 }
 
+// isAllDigits checks if a string contains only digits
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, ch := range s {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // isValidPathChar checks if a character is valid in a path pattern
 func isValidPathChar(ch rune) bool {
 	return (ch >= 'a' && ch <= 'z') ||
 		(ch >= 'A' && ch <= 'Z') ||
 		(ch >= '0' && ch <= '9') ||
-		ch == '/' || ch == '*' || ch == '.' || ch == '-' || ch == '_'
+		ch == '/' || ch == '*' || ch == '.' || ch == '-' || ch == '_' ||
+		ch == '?' || ch == '='  // Allow for condition encoding like ?cond=name
 }
 
 // detectConflicts finds conflicting allow and deny rules
@@ -197,10 +219,10 @@ func (a *Analyzer) detectConflicts() []ConflictInfo {
 	var conflicts []ConflictInfo
 
 	// Group policies by subject for efficient comparison
-	allowRules := make(map[string][]models.Policy)
-	denyRules := make(map[string][]models.Policy)
+	allowRules := make(map[string][]models.DecodedPolicy)
+	denyRules := make(map[string][]models.DecodedPolicy)
 
-	for _, policy := range a.pml.Policies {
+	for _, policy := range a.decoded.Policies {
 		key := policy.Subject
 		if policy.Effect == "allow" {
 			allowRules[key] = append(allowRules[key], policy)
@@ -234,7 +256,7 @@ func (a *Analyzer) detectConflicts() []ConflictInfo {
 }
 
 // rulesConflict checks if two rules conflict
-func (a *Analyzer) rulesConflict(allow, deny models.Policy) bool {
+func (a *Analyzer) rulesConflict(allow, deny models.DecodedPolicy) bool {
 	// Rules conflict if they have the same subject, overlapping objects, same action, and same class
 	if allow.Subject != deny.Subject {
 		return false
@@ -285,14 +307,16 @@ func (a *Analyzer) pathsOverlap(path1, path2 string) bool {
 func (a *Analyzer) generateStats() {
 	stats := a.stats
 
-	stats.TotalPolicies = len(a.pml.Policies)
-	stats.RoleRelations = len(a.pml.Roles)
+	stats.TotalPolicies = len(a.decoded.Policies)
+	stats.RoleRelations = len(a.decoded.Roles) + len(a.decoded.TypeAttributes)
+	stats.Transitions = len(a.decoded.Transitions)
+	stats.Booleans = len(a.decoded.Booleans)
 
 	uniqueSubjects := make(map[string]bool)
 	uniqueObjects := make(map[string]bool)
 	uniqueActions := make(map[string]bool)
 
-	for _, policy := range a.pml.Policies {
+	for _, policy := range a.decoded.Policies {
 		// Count allow and deny rules
 		if policy.Effect == "allow" {
 			stats.AllowRules++

@@ -23,10 +23,11 @@ func BenchmarkParser(b *testing.B) {
 func BenchmarkAnalyzer(b *testing.B) {
 	parser := NewParser("../examples/httpd/httpd_model.conf", "../examples/httpd/httpd_policy.csv")
 	pml, _ := parser.Parse()
+	decoded, _ := parser.Decode(pml)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		analyzer := NewAnalyzer(pml)
+		analyzer := NewAnalyzer(decoded)
 		if err := analyzer.Analyze(); err != nil {
 			b.Fatal(err)
 		}
@@ -37,10 +38,11 @@ func BenchmarkAnalyzer(b *testing.B) {
 func BenchmarkGenerator(b *testing.B) {
 	parser := NewParser("../examples/httpd/httpd_model.conf", "../examples/httpd/httpd_policy.csv")
 	pml, _ := parser.Parse()
+	decoded, _ := parser.Decode(pml)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		generator := NewGenerator(pml, "")
+		generator := NewGenerator(decoded, "")
 		_, err := generator.Generate()
 		if err != nil {
 			b.Fatal(err)
@@ -52,7 +54,8 @@ func BenchmarkGenerator(b *testing.B) {
 func BenchmarkOptimizer(b *testing.B) {
 	parser := NewParser("../examples/httpd/httpd_model.conf", "../examples/httpd/httpd_policy.csv")
 	pml, _ := parser.Parse()
-	generator := NewGenerator(pml, "")
+	decoded, _ := parser.Decode(pml)
+	generator := NewGenerator(decoded, "")
 	sePolicy, _ := generator.Generate()
 
 	b.ResetTimer()
@@ -78,14 +81,20 @@ func BenchmarkFullPipeline(b *testing.B) {
 			b.Fatal(err)
 		}
 
+		// Decode
+		decoded, err := parser.Decode(pml)
+		if err != nil {
+			b.Fatal(err)
+		}
+
 		// Analyze
-		analyzer := NewAnalyzer(pml)
+		analyzer := NewAnalyzer(decoded)
 		if err := analyzer.Analyze(); err != nil {
 			b.Fatal(err)
 		}
 
 		// Generate
-		generator := NewGenerator(pml, "")
+		generator := NewGenerator(decoded, "")
 		sePolicy, err := generator.Generate()
 		if err != nil {
 			b.Fatal(err)

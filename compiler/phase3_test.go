@@ -10,13 +10,18 @@ import (
 
 // TestBooleanGeneration tests the generation of booleans
 func TestBooleanGeneration(t *testing.T) {
-	pml := &models.ParsedPML{
-		Booleans: []models.BooleanDefinition{
-			{Name: "httpd_enable_homedirs", DefaultValue: false, Description: "Enable home dirs"},
+	decoded := &models.DecodedPML{
+		Model: &models.PMLModel{},
+		Policies: []models.DecodedPolicy{},
+		Roles: []models.RoleRelation{},
+		TypeAttributes: []models.RoleRelation{},
+		Booleans: []models.DecodedBoolean{
+			{Name: "httpd_enable_homedirs", DefaultValue: false},
 		},
+		Transitions: []models.TransitionInfo{},
 	}
 
-	gen := NewGenerator(pml, "testmodule")
+	gen := NewGenerator(decoded, "testmodule")
 	policy, err := gen.Generate()
 	assert.NoError(t, err)
 	assert.NotNil(t, policy)
@@ -28,13 +33,27 @@ func TestBooleanGeneration(t *testing.T) {
 
 // TestMacroGeneration tests the generation of macros
 func TestMacroGeneration(t *testing.T) {
-	pml := &models.ParsedPML{
-		Policies: []models.Policy{
-			{Subject: "my_app", Object: "/data/app/*", Action: "read", Class: "file", Effect: "allow"},
+	decoded := &models.DecodedPML{
+		Model: &models.PMLModel{},
+		Policies: []models.DecodedPolicy{
+			{
+				Policy: models.Policy{
+					Type: "p",
+					Subject: "my_app",
+					Object: "/data/app/*",
+					Action: "read",
+					Class: "file",
+					Effect: "allow",
+				},
+			},
 		},
+		Roles: []models.RoleRelation{},
+		TypeAttributes: []models.RoleRelation{},
+		Booleans: []models.DecodedBoolean{},
+		Transitions: []models.TransitionInfo{},
 	}
 
-	gen := NewGenerator(pml, "my_app")
+	gen := NewGenerator(decoded, "my_app")
 	policy, err := gen.Generate()
 	assert.NoError(t, err)
 

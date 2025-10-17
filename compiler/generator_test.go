@@ -7,7 +7,32 @@ import (
 )
 
 func TestGenerator_Generate(t *testing.T) {
-	pml := &models.ParsedPML{
+	policies := []models.Policy{
+		{
+			Type:    "p",
+			Subject: "httpd",
+			Object:  "/var/www/html/*",
+			Action:  "read",
+			Class:   "file",
+			Effect:  "allow",
+		},
+		{
+			Type:    "p",
+			Subject: "httpd",
+			Object:  "/var/log/httpd/*",
+			Action:  "write",
+			Class:   "file",
+			Effect:  "allow",
+		},
+	}
+
+	// Convert policies to decoded policies
+	decodedPolicies := make([]models.DecodedPolicy, len(policies))
+	for i, policy := range policies {
+		decodedPolicies[i] = models.DecodedPolicy{Policy: policy}
+	}
+
+	decoded := &models.DecodedPML{
 		Model: &models.PMLModel{
 			RequestDefinition: map[string][]string{
 				"r": {"sub", "obj", "act", "cls"},
@@ -18,26 +43,14 @@ func TestGenerator_Generate(t *testing.T) {
 			Matchers: "r.sub == p.sub && r.obj == p.obj && r.act == p.act && r.cls == p.cls",
 			Effect:   "some(where (p.eft == allow))",
 		},
-		Policies: []models.Policy{
-			{
-				Subject: "httpd",
-				Object:  "/var/www/html/*",
-				Action:  "read",
-				Class:   "file",
-				Effect:  "allow",
-			},
-			{
-				Subject: "httpd",
-				Object:  "/var/log/httpd/*",
-				Action:  "write",
-				Class:   "file",
-				Effect:  "allow",
-			},
-		},
-		Roles: []models.RoleRelation{},
+		Policies:        decodedPolicies,
+		Roles:           []models.RoleRelation{},
+		TypeAttributes:  []models.RoleRelation{},
+		Booleans:        []models.DecodedBoolean{},
+		Transitions:     []models.TransitionInfo{},
 	}
 
-	generator := NewGenerator(pml, "httpd")
+	generator := NewGenerator(decoded, "httpd")
 	policy, err := generator.Generate()
 
 	if err != nil {
@@ -66,14 +79,27 @@ func TestGenerator_Generate(t *testing.T) {
 }
 
 func TestGenerator_InferModuleName(t *testing.T) {
-	pml := &models.ParsedPML{
+	decoded := &models.DecodedPML{
 		Model: &models.PMLModel{},
-		Policies: []models.Policy{
-			{Subject: "nginx_process", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
+		Policies: []models.DecodedPolicy{
+			{
+				Policy: models.Policy{
+					Type:    "p",
+					Subject: "nginx_process",
+					Object:  "/var/www/*",
+					Action:  "read",
+					Class:   "file",
+					Effect:  "allow",
+				},
+			},
 		},
+		Roles:           []models.RoleRelation{},
+		TypeAttributes:  []models.RoleRelation{},
+		Booleans:        []models.DecodedBoolean{},
+		Transitions:     []models.TransitionInfo{},
 	}
 
-	generator := NewGenerator(pml, "")
+	generator := NewGenerator(decoded, "")
 	policy, err := generator.Generate()
 
 	if err != nil {
@@ -86,11 +112,15 @@ func TestGenerator_InferModuleName(t *testing.T) {
 }
 
 func TestGenerator_ActionToPermissions(t *testing.T) {
-	pml := &models.ParsedPML{
-		Model:    &models.PMLModel{},
-		Policies: []models.Policy{},
+	decoded := &models.DecodedPML{
+		Model:           &models.PMLModel{},
+		Policies:        []models.DecodedPolicy{},
+		Roles:           []models.RoleRelation{},
+		TypeAttributes:  []models.RoleRelation{},
+		Booleans:        []models.DecodedBoolean{},
+		Transitions:     []models.TransitionInfo{},
 	}
-	gen := NewGenerator(pml, "test")
+	gen := NewGenerator(decoded, "test")
 
 	tests := []struct {
 		name             string
