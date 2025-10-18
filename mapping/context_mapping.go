@@ -229,8 +229,47 @@ func (pm *PathMapper) InferFileType(path string) string {
 		return "all files" // This will generate pattern without file type specifier
 	}
 
+	// Check for device files (block and character devices)
+	if strings.HasPrefix(path, "/dev/") {
+		// Block devices: disks, partitions
+		if strings.Contains(path, "sd") || strings.Contains(path, "hd") ||
+			strings.Contains(path, "vd") || strings.Contains(path, "nvme") ||
+			strings.Contains(path, "loop") || strings.Contains(path, "dm-") {
+			return "block"
+		}
+		// Character devices: tty, pts, random, null, zero
+		if strings.Contains(path, "tty") || strings.Contains(path, "pts") ||
+			strings.Contains(path, "random") || strings.Contains(path, "urandom") ||
+			path == "/dev/null" || path == "/dev/zero" || strings.Contains(path, "console") {
+			return "char"
+		}
+		// Default device type
+		return "char"
+	}
+
+	// Check for socket files
+	if strings.Contains(path, ".sock") || strings.Contains(path, ".socket") ||
+		strings.HasPrefix(path, "/run/") || strings.HasPrefix(path, "/var/run/") {
+		// Common socket locations
+		if strings.HasSuffix(path, ".sock") || strings.HasSuffix(path, ".socket") ||
+			strings.Contains(path, "socket") || strings.Contains(path, "/dbus/") {
+			return "socket"
+		}
+	}
+
+	// Check for named pipes (FIFOs)
+	if strings.Contains(path, ".fifo") || strings.Contains(path, "/pipe/") {
+		return "pipe"
+	}
+
+	// Check for symbolic links
+	if strings.Contains(path, "/link/") || path == "/etc/alternatives" ||
+		(strings.HasPrefix(path, "/etc/alternatives/") && !strings.Contains(path, ".")) {
+		return "symlink"
+	}
+
 	// Check for known directory patterns
-	dirPatterns := []string{"/bin", "/sbin", "/lib", "/etc", "/var", "/usr", "/opt", "/srv"}
+	dirPatterns := []string{"/bin", "/sbin", "/lib", "/lib64", "/etc", "/var", "/usr", "/opt", "/srv", "/home"}
 	for _, dirPattern := range dirPatterns {
 		if path == dirPattern || strings.HasPrefix(path, dirPattern+"/") {
 			// Check if it's a config file
@@ -241,7 +280,7 @@ func (pm *PathMapper) InferFileType(path string) string {
 	}
 
 	// Check file extensions for regular files
-	fileExtensions := []string{".conf", ".cfg", ".txt", ".log", ".html", ".htm", ".php", ".py", ".sh", ".so", ".a"}
+	fileExtensions := []string{".conf", ".cfg", ".txt", ".log", ".html", ".htm", ".php", ".py", ".sh", ".so", ".a", ".service", ".target", ".mount", ".timer"}
 	for _, ext := range fileExtensions {
 		if strings.HasSuffix(path, ext) || strings.Contains(path, ext) {
 			return "regular file"
@@ -430,22 +469,6 @@ func (pm *PathMapper) handleDoubleStarPattern(path string) string {
 	return result
 }
 
-// escapePathPreservingRegex escapes a path while preserving existing regex patterns
-func (pm *PathMapper) escapePathPreservingRegex(path string) string {
-	// Don't escape if it already contains regex patterns from brace expansion
-	if strings.Contains(path, "(") && strings.Contains(path, "|") {
-		return path
-	}
-
-	// Otherwise, escape wildcards
-	if strings.Contains(path, "*") {
-		path = escapeRegexCharsPreservingWildcards(path)
-		path = strings.ReplaceAll(path, "*", "[^/]+")
-	}
-
-	return path
-}
-
 // convertWildcards converts wildcards to regex patterns, handling character classes specially
 func (pm *PathMapper) convertWildcards(path string) string {
 	// First, handle character classes followed by wildcards
@@ -472,4 +495,85 @@ func (pm *PathMapper) escapePreservingPatterns(path string, preserveRegex bool) 
 	// Use the same logic as escapeRegexCharsPreservingWildcardsAndCharClasses
 	// to also preserve character classes
 	return escapeRegexCharsPreservingWildcardsAndCharClasses(path)
+}
+
+// MatchPattern checks if a path matches a SELinux pattern (for validation)
+func (pm *PathMapper) MatchPattern(selinuxPattern, testPath string) (bool, error) {
+	// Compile the pattern as a regex
+	regex, err := regexp.Compile("^" + selinuxPattern + "$")
+	if err != nil {
+		return false, fmt.Errorf("invalid pattern: %w", err)
+	}
+
+	return regex.MatchString(testPath), nil
+}
+
+// InferContextType determines the SELinux type based on path characteristics
+// This provides smart type suggestions for file contexts
+func (pm *PathMapper) InferContextType(path string) string {
+	// Executable directories
+	if strings.HasPrefix(path, "/bin/") || strings.HasPrefix(path, "/sbin/") ||
+		strings.HasPrefix(path, "/usr/bin/") || strings.HasPrefix(path, "/usr/sbin/") {
+		return "bin_t"
+	}
+
+	// Library files
+	if strings.HasPrefix(path, "/lib/") || strings.HasPrefix(path, "/lib64/") ||
+		strings.HasPrefix(path, "/usr/lib/") {
+		if strings.HasSuffix(path, ".so") || strings.Contains(path, ".so.") {
+			return "lib_t"
+		}
+	}
+
+	// Configuration files
+	if strings.HasPrefix(path, "/etc/") {
+		return "etc_t"
+	}
+
+	// Log files
+	if strings.HasPrefix(path, "/var/log/") {
+		return "var_log_t"
+	}
+
+	// Temporary files
+	if strings.HasPrefix(path, "/tmp/") || strings.HasPrefix(path, "/var/tmp/") {
+		return "tmp_t"
+	}
+
+	// Runtime files
+	if strings.HasPrefix(path, "/run/") || strings.HasPrefix(path, "/var/run/") {
+		return "var_run_t"
+	}
+
+	// Home directories
+	if strings.HasPrefix(path, "/home/") || strings.HasPrefix(path, "/root/") {
+		return "user_home_t"
+	}
+
+	// Device files
+	if strings.HasPrefix(path, "/dev/") {
+		return "device_t"
+	}
+
+	// Default type
+	return "default_t"
+}
+
+// SplitPathPattern splits a complex pattern into base and wildcard parts
+// Useful for generating more precise SELinux patterns
+func (pm *PathMapper) SplitPathPattern(path string) (base, wildcard string) {
+	// Find first wildcard character
+	wildcardIndex := strings.IndexAny(path, "*?{")
+	if wildcardIndex == -1 {
+		return path, ""
+	}
+
+	// Find last slash before wildcard
+	basePart := path[:wildcardIndex]
+	lastSlash := strings.LastIndex(basePart, "/")
+	if lastSlash == -1 {
+		return "", path
+	}
+
+	return path[:lastSlash], path[lastSlash+1:]
 }

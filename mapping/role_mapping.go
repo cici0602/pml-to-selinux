@@ -273,5 +273,101 @@ func ValidateRoleName(roleName string) error {
 		return fmt.Errorf("role name cannot contain spaces: %s", roleName)
 	}
 
+	// Check for valid characters (alphanumeric and underscore only)
+	for _, char := range roleName {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '_') {
+			return fmt.Errorf("role name contains invalid character: %s", roleName)
+		}
+	}
+
 	return nil
+}
+
+// ValidateUserRoleAssignment validates if a user can be assigned a role
+func (rm *RoleMapper) ValidateUserRoleAssignment(user, role string) error {
+	// Validate role name
+	if err := ValidateRoleName(role); err != nil {
+		return err
+	}
+
+	// Check for privilege escalation
+	// Admin roles
+	adminRoles := []string{"admin", "sysadm", "secadm", "auditadm"}
+	isAdminRole := false
+	for _, adminRole := range adminRoles {
+		if strings.Contains(strings.ToLower(role), adminRole) {
+			isAdminRole = true
+			break
+		}
+	}
+
+	if isAdminRole {
+		// Check if user is authorized for admin roles
+		isAuthorizedUser := strings.Contains(strings.ToLower(user), "admin") ||
+			strings.Contains(strings.ToLower(user), "root") ||
+			user == "root"
+
+		if !isAuthorizedUser {
+			return fmt.Errorf("user %s cannot be assigned privileged role %s", user, role)
+		}
+	}
+
+	return nil
+}
+
+// CheckRoleConsistency validates role hierarchy for circular dependencies
+func (rm *RoleMapper) CheckRoleConsistency() []error {
+	errors := []error{}
+
+	// Check for circular dependencies
+	visited := make(map[string]bool)
+	recStack := make(map[string]bool)
+
+	var detectCycle func(role string) bool
+	detectCycle = func(role string) bool {
+		visited[role] = true
+		recStack[role] = true
+
+		// Check all parent roles
+		if parents, ok := rm.roleHierarchy[role]; ok {
+			for _, parent := range parents {
+				if !visited[parent] {
+					if detectCycle(parent) {
+						return true
+					}
+				} else if recStack[parent] {
+					errors = append(errors, fmt.Errorf("circular dependency detected: %s -> %s", role, parent))
+					return true
+				}
+			}
+		}
+
+		recStack[role] = false
+		return false
+	}
+
+	// Check all roles
+	for role := range rm.roleHierarchy {
+		if !visited[role] {
+			detectCycle(role)
+		}
+	}
+
+	return errors
+}
+
+// GenerateRoleConstraints generates role-based constraints
+func (rm *RoleMapper) GenerateRoleConstraints() []string {
+	constraints := []string{}
+
+	// Constraint: Users can only change roles if they have the can_change_role attribute
+	constraints = append(constraints,
+		"constrain process transition ( r1 == r2 or t1 == can_change_role );")
+
+	// Constraint: Prevent direct user->admin role transitions
+	constraints = append(constraints,
+		"constrain process transition ( r1 == system_r or r2 != sysadm_r );")
+
+	return constraints
 }
