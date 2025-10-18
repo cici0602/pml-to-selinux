@@ -1,0 +1,4 @@
+✓ Compilation successful!
+  Generated: /home/chris/opensource/casbin-go/pml-to-selinux/test_output/webserver/webserver.te
+  Generated: /home/chris/opensource/casbin-go/pml-to-selinux/test_output/webserver/webserver.fc
+  Generated: /home/chris/opensource/casbin-go/pml-to-selinux/test_output/webserver/webserver.if

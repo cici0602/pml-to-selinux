@@ -55,6 +55,11 @@ func (g *TEGenerator) Generate() (string, error) {
 		return "", err
 	}
 
+	// Write conditional blocks if any
+	if err := g.writeConditionalBlocks(&builder); err != nil {
+		return "", err
+	}
+
 	return builder.String(), nil
 }
 
@@ -291,12 +296,111 @@ func (g *TEGenerator) writeTypeTransitions(builder *strings.Builder) error {
 		return transitions[i].Class < transitions[j].Class
 	})
 
+	// Generate domain transitions with supporting rules
 	for _, trans := range transitions {
-		builder.WriteString(fmt.Sprintf("type_transition %s %s:%s %s;\n",
-			trans.SourceType, trans.TargetType, trans.Class, trans.NewType))
+		if trans.Class == "process" {
+			// This is a domain transition, generate the complete triplet
+			g.writeDomainTransitionRules(builder, &trans)
+		} else {
+			// Regular type transition
+			builder.WriteString(fmt.Sprintf("type_transition %s %s:%s %s;\n",
+				trans.SourceType, trans.TargetType, trans.Class, trans.NewType))
+		}
 	}
 
 	builder.WriteString("\n")
+	return nil
+}
+
+// writeDomainTransitionRules generates the complete domain transition triplet:
+// 1. type_transition - defines the transition
+// 2. allow source target:file execute - parent can execute child binary
+// 3. allow source target:process transition - parent can transition to child
+// 4. allow target target:file entrypoint - child can use its binary as entrypoint
+func (g *TEGenerator) writeDomainTransitionRules(builder *strings.Builder, trans *models.TypeTransition) {
+	source := trans.SourceType
+	entrypoint := trans.TargetType
+	target := trans.NewType
+
+	builder.WriteString(fmt.Sprintf("# Domain transition: %s -> %s\n", source, target))
+
+	// 1. Type transition rule
+	builder.WriteString(fmt.Sprintf("type_transition %s %s:process %s;\n",
+		source, entrypoint, target))
+
+	// 2. Allow parent to execute child binary
+	builder.WriteString(fmt.Sprintf("allow %s %s:file execute;\n",
+		source, entrypoint))
+
+	// 3. Allow parent to transition to child domain
+	builder.WriteString(fmt.Sprintf("allow %s %s:process transition;\n",
+		source, target))
+
+	// 4. Allow child to use binary as entrypoint
+	builder.WriteString(fmt.Sprintf("allow %s %s:file entrypoint;\n",
+		target, entrypoint))
+
+	builder.WriteString("\n")
+}
+
+// writeConditionalBlocks writes conditional policy blocks (if-else)
+func (g *TEGenerator) writeConditionalBlocks(builder *strings.Builder) error {
+	if len(g.policy.ConditionalBlocks) == 0 {
+		return nil
+	}
+
+	builder.WriteString("########################################\n")
+	builder.WriteString("# Conditional Policy Blocks\n")
+	builder.WriteString("########################################\n\n")
+
+	// Sort conditional blocks for consistent output
+	blocks := make([]models.ConditionalBlock, len(g.policy.ConditionalBlocks))
+	copy(blocks, g.policy.ConditionalBlocks)
+	sort.Slice(blocks, func(i, j int) bool {
+		return blocks[i].BooleanExpr < blocks[j].BooleanExpr
+	})
+
+	for _, block := range blocks {
+		// Write if statement
+		builder.WriteString(fmt.Sprintf("if (%s) {\n", block.BooleanExpr))
+
+		// Write then rules
+		for _, rule := range block.ThenRules {
+			perms := make([]string, len(rule.Permissions))
+			copy(perms, rule.Permissions)
+			sort.Strings(perms)
+
+			if len(perms) == 1 {
+				builder.WriteString(fmt.Sprintf("\tallow %s %s:%s %s;\n",
+					rule.SourceType, rule.TargetType, rule.Class, perms[0]))
+			} else {
+				builder.WriteString(fmt.Sprintf("\tallow %s %s:%s { %s };\n",
+					rule.SourceType, rule.TargetType, rule.Class, strings.Join(perms, " ")))
+			}
+		}
+
+		// Write else block if present
+		if len(block.ElseRules) > 0 {
+			builder.WriteString("} else {\n")
+
+			for _, rule := range block.ElseRules {
+				perms := make([]string, len(rule.Permissions))
+				copy(perms, rule.Permissions)
+				sort.Strings(perms)
+
+				if len(perms) == 1 {
+					builder.WriteString(fmt.Sprintf("\tallow %s %s:%s %s;\n",
+						rule.SourceType, rule.TargetType, rule.Class, perms[0]))
+				} else {
+					builder.WriteString(fmt.Sprintf("\tallow %s %s:%s { %s };\n",
+						rule.SourceType, rule.TargetType, rule.Class, strings.Join(perms, " ")))
+				}
+			}
+		}
+
+		builder.WriteString("}\n\n")
+	}
+
 	return nil
 }
 

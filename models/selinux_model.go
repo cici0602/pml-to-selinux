@@ -2,17 +2,18 @@ package models
 
 // SELinuxPolicy represents a complete SELinux policy module
 type SELinuxPolicy struct {
-	ModuleName   string
-	Version      string
-	Types        []TypeDeclaration
-	Rules        []AllowRule
-	DenyRules    []DenyRule
-	Transitions  []TypeTransition
-	FileContexts []FileContext
-	Booleans     []BooleanDeclaration
-	Interfaces   []InterfaceDefinition
-	Macros       []MacroDefinition
-	Constraints  []Constraint // SELinux constraints
+	ModuleName        string
+	Version           string
+	Types             []TypeDeclaration
+	Rules             []AllowRule
+	DenyRules         []DenyRule
+	Transitions       []TypeTransition
+	FileContexts      []FileContext
+	Booleans          []BooleanDeclaration
+	ConditionalBlocks []ConditionalBlock // Conditional policy blocks
+	Interfaces        []InterfaceDefinition
+	Macros            []MacroDefinition
+	Constraints       []Constraint // SELinux constraints
 }
 
 // TypeDeclaration represents a SELinux type declaration
@@ -72,6 +73,14 @@ type BooleanDeclaration struct {
 	Description  string
 }
 
+// ConditionalBlock represents a conditional policy block (if-else)
+// Format in SELinux: if (boolean_expr) { rules } else { rules }
+type ConditionalBlock struct {
+	BooleanExpr string      // Boolean expression: "httpd_enable_homedirs" or "!httpd_enable_homedirs"
+	ThenRules   []AllowRule // Rules when condition is true
+	ElseRules   []AllowRule // Rules when condition is false (optional)
+}
+
 // ConditionalRule represents a rule that depends on a boolean
 type ConditionalRule struct {
 	BooleanName string
@@ -90,17 +99,18 @@ type MacroDefinition struct {
 // NewSELinuxPolicy creates a new SELinuxPolicy with default values
 func NewSELinuxPolicy(moduleName, version string) *SELinuxPolicy {
 	return &SELinuxPolicy{
-		ModuleName:   moduleName,
-		Version:      version,
-		Types:        make([]TypeDeclaration, 0),
-		Rules:        make([]AllowRule, 0),
-		DenyRules:    make([]DenyRule, 0),
-		Transitions:  make([]TypeTransition, 0),
-		FileContexts: make([]FileContext, 0),
-		Booleans:     make([]BooleanDeclaration, 0),
-		Interfaces:   make([]InterfaceDefinition, 0),
-		Macros:       make([]MacroDefinition, 0),
-		Constraints:  make([]Constraint, 0),
+		ModuleName:        moduleName,
+		Version:           version,
+		Types:             make([]TypeDeclaration, 0),
+		Rules:             make([]AllowRule, 0),
+		DenyRules:         make([]DenyRule, 0),
+		Transitions:       make([]TypeTransition, 0),
+		FileContexts:      make([]FileContext, 0),
+		Booleans:          make([]BooleanDeclaration, 0),
+		ConditionalBlocks: make([]ConditionalBlock, 0),
+		Interfaces:        make([]InterfaceDefinition, 0),
+		Macros:            make([]MacroDefinition, 0),
+		Constraints:       make([]Constraint, 0),
 	}
 }
 
