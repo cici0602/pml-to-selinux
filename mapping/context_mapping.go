@@ -31,6 +31,9 @@ func (pm *PathMapper) AddCustomMapping(casbinPattern, selinuxPattern string) {
 //	/etc/*.conf          →  /etc/[^/]+\.conf
 //	/var/log/httpd/*     →  /var/log/httpd(/.*)?
 //	/home/*/public_html  →  /home/[^/]+/public_html
+//	/path/**/file        →  /path/.*/file (recursive subdirs)
+//	/etc/[a-z]*.conf     →  /etc/[a-z][^/]*\.conf (char class)
+//	/var/{log,tmp}/*     →  /var/(log|tmp)(/.*)? (brace expansion)
 func (pm *PathMapper) ConvertToSELinuxPattern(casbinPath string) string {
 	// Check for custom mapping first
 	if customPattern, ok := pm.customMappings[casbinPath]; ok {
@@ -39,26 +42,35 @@ func (pm *PathMapper) ConvertToSELinuxPattern(casbinPath string) string {
 
 	pattern := casbinPath
 
+	// Handle brace expansion {a,b,c} → (a|b|c) BEFORE escaping
+	hasBraceExpansion := strings.Contains(pattern, "{")
+	pattern = pm.expandBraces(pattern)
+
+	// Handle double-star /** pattern BEFORE handling /* (as /** can contain /*)
+	if strings.Contains(pattern, "/**") {
+		return pm.handleDoubleStarPattern(pattern)
+	}
+
 	// Handle recursive patterns ending with /*
 	if strings.HasSuffix(pattern, "/*") {
 		// /var/www/* → /var/www(/.*)?
 		base := strings.TrimSuffix(pattern, "/*")
-		// Handle wildcards in the base path first
-		if strings.Contains(base, "*") {
-			base = escapeRegexCharsPreservingWildcards(base)
-			base = strings.ReplaceAll(base, "*", "[^/]+")
-		} else {
-			base = escapeRegexChars(base)
-		}
+		// Escape the base, but preserve regex patterns from brace expansion
+		base = pm.escapePreservingPatterns(base, hasBraceExpansion)
 		return base + "(/.*)?"
 	}
 
-	// Escape special regex characters except * and ?
-	pattern = escapeRegexCharsPreservingWildcards(casbinPath)
+	// Escape special regex characters except * and ? and character classes
+	if hasBraceExpansion {
+		pattern = pm.escapePreservingPatterns(pattern, true)
+	} else {
+		pattern = escapeRegexCharsPreservingWildcardsAndCharClasses(pattern)
+	}
 
 	// Convert middle wildcards
 	// /etc/*.conf → /etc/[^/]+\.conf
-	pattern = strings.ReplaceAll(pattern, "*", "[^/]+")
+	// But preserve [^/]* if preceded by character class
+	pattern = pm.convertWildcards(pattern)
 
 	// Convert ? to single character match
 	pattern = strings.ReplaceAll(pattern, "?", ".")
@@ -93,6 +105,49 @@ func escapeRegexCharsPreservingWildcards(s string) string {
 
 	// * and ? are left as-is for further processing
 	return result
+}
+
+// escapeRegexCharsPreservingWildcardsAndCharClasses escapes regex chars but preserves *, ?, and [...]
+func escapeRegexCharsPreservingWildcardsAndCharClasses(s string) string {
+	// Protect both character classes [...] and parentheses from brace expansion (...)
+	// First, protect parentheses and pipes from brace expansion
+	s = strings.ReplaceAll(s, "(", "__LPAREN__")
+	s = strings.ReplaceAll(s, ")", "__RPAREN__")
+	s = strings.ReplaceAll(s, "|", "__PIPE__")
+
+	// Use regex to protect character classes temporarily
+	charClassRegex := regexp.MustCompile(`\[([^\]]+)\]`)
+
+	// Find all character classes
+	matches := charClassRegex.FindAllStringSubmatchIndex(s, -1)
+
+	// Build result by processing non-character-class parts
+	var result strings.Builder
+	lastIndex := 0
+
+	for _, match := range matches {
+		// Process text before character class
+		beforeClass := s[lastIndex:match[0]]
+		result.WriteString(escapeRegexCharsPreservingWildcards(beforeClass))
+
+		// Add character class as-is
+		result.WriteString(s[match[0]:match[1]])
+
+		lastIndex = match[1]
+	}
+
+	// Process remaining text after last character class
+	if lastIndex < len(s) {
+		result.WriteString(escapeRegexCharsPreservingWildcards(s[lastIndex:]))
+	}
+
+	// Restore parentheses and pipes
+	finalResult := result.String()
+	finalResult = strings.ReplaceAll(finalResult, "__LPAREN__", "(")
+	finalResult = strings.ReplaceAll(finalResult, "__RPAREN__", ")")
+	finalResult = strings.ReplaceAll(finalResult, "__PIPE__", "|")
+
+	return finalResult
 }
 
 // IsDirectoryPattern checks if a path pattern represents a directory
@@ -292,4 +347,129 @@ func ExtractBasePath(path string) string {
 	}
 
 	return "/"
+}
+
+// expandBraces expands brace patterns like {a,b,c} into (a|b|c)
+// Example: /var/{log,tmp}/* → /var/(log|tmp)/*
+func (pm *PathMapper) expandBraces(path string) string {
+	// Find brace patterns using regex
+	braceRegex := regexp.MustCompile(`\{([^}]+)\}`)
+	return braceRegex.ReplaceAllStringFunc(path, func(match string) string {
+		// Extract content between braces
+		content := match[1 : len(match)-1]
+		// Split by comma
+		alternatives := strings.Split(content, ",")
+		// Trim whitespace from each alternative
+		for i := range alternatives {
+			alternatives[i] = strings.TrimSpace(alternatives[i])
+		}
+		// Join with | for regex alternation
+		return "(" + strings.Join(alternatives, "|") + ")"
+	})
+}
+
+// handleDoubleStarPattern handles /** patterns for recursive subdirectory matching
+// Example: /usr/**/bin → /usr/.*/bin
+func (pm *PathMapper) handleDoubleStarPattern(path string) string {
+	// Check if path already contains regex patterns from brace expansion
+	hasRegexPatterns := strings.Contains(path, "(") && strings.Contains(path, "|")
+
+	// Check if it also ends with /*
+	endsWithSlashStar := strings.HasSuffix(path, "/*")
+	if endsWithSlashStar {
+		// Remove the /* suffix temporarily
+		path = strings.TrimSuffix(path, "/*")
+	}
+
+	// Special case: if path ends with /**, just add (/.*)?
+	if strings.HasSuffix(path, "/**") {
+		base := strings.TrimSuffix(path, "/**")
+		// Preserve existing regex patterns
+		if hasRegexPatterns {
+			base = escapeRegexCharsPreservingWildcardsAndCharClasses(base)
+		} else {
+			base = escapeRegexChars(base)
+		}
+		result := base + "(/.*)?"
+		// If originally ended with /*, that's already covered by (/.*)?
+		return result
+	}
+
+	// Escape special characters except ** and /
+	parts := strings.Split(path, "/**")
+	escapedParts := make([]string, len(parts))
+
+	for i, part := range parts {
+		// Skip empty parts
+		if part == "" {
+			continue
+		}
+
+		// Process wildcards in each part, preserving regex patterns
+		if hasRegexPatterns {
+			part = escapeRegexCharsPreservingWildcardsAndCharClasses(part)
+			// Need to convert remaining wildcards
+			part = pm.convertWildcards(part)
+		} else if strings.Contains(part, "*") {
+			part = escapeRegexCharsPreservingWildcards(part)
+			part = strings.ReplaceAll(part, "*", "[^/]+")
+		} else {
+			part = escapeRegexChars(part)
+		}
+		escapedParts[i] = part
+	}
+
+	// Join with .* for recursive matching
+	result := strings.Join(escapedParts, "/.*")
+
+	// Add /* pattern if it was there
+	if endsWithSlashStar {
+		result += "(/.*)?"
+	}
+
+	return result
+}
+
+// escapePathPreservingRegex escapes a path while preserving existing regex patterns
+func (pm *PathMapper) escapePathPreservingRegex(path string) string {
+	// Don't escape if it already contains regex patterns from brace expansion
+	if strings.Contains(path, "(") && strings.Contains(path, "|") {
+		return path
+	}
+
+	// Otherwise, escape wildcards
+	if strings.Contains(path, "*") {
+		path = escapeRegexCharsPreservingWildcards(path)
+		path = strings.ReplaceAll(path, "*", "[^/]+")
+	}
+
+	return path
+}
+
+// convertWildcards converts wildcards to regex patterns, handling character classes specially
+func (pm *PathMapper) convertWildcards(path string) string {
+	// First, handle character classes followed by wildcards
+	// [a-z]* should become [a-z][^/]* not [a-z][^/]+
+	// Use placeholder to avoid double replacement
+	charClassWildcard := regexp.MustCompile(`(\[[^\]]+\])\*`)
+	path = charClassWildcard.ReplaceAllString(path, "${1}__CHARWILD__")
+
+	// Convert remaining standalone * to [^/]+
+	path = strings.ReplaceAll(path, "*", "[^/]+")
+
+	// Restore character class wildcards
+	path = strings.ReplaceAll(path, "__CHARWILD__", "[^/]*")
+
+	return path
+}
+
+// escapePreservingPatterns escapes special characters while preserving regex patterns from expansions
+func (pm *PathMapper) escapePreservingPatterns(path string, preserveRegex bool) string {
+	if !preserveRegex {
+		return escapeRegexChars(path)
+	}
+
+	// Use the same logic as escapeRegexCharsPreservingWildcardsAndCharClasses
+	// to also preserve character classes
+	return escapeRegexCharsPreservingWildcardsAndCharClasses(path)
 }

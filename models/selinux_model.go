@@ -12,6 +12,7 @@ type SELinuxPolicy struct {
 	Booleans     []BooleanDeclaration
 	Interfaces   []InterfaceDefinition
 	Macros       []MacroDefinition
+	Constraints  []Constraint // SELinux constraints
 }
 
 // TypeDeclaration represents a SELinux type declaration
@@ -99,6 +100,7 @@ func NewSELinuxPolicy(moduleName, version string) *SELinuxPolicy {
 		Booleans:     make([]BooleanDeclaration, 0),
 		Interfaces:   make([]InterfaceDefinition, 0),
 		Macros:       make([]MacroDefinition, 0),
+		Constraints:  make([]Constraint, 0),
 	}
 }
 
