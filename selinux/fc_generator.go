@@ -144,18 +144,5 @@ func GenerateFC(policy *models.SELinuxPolicy) (string, error) {
 	return generator.Generate()
 }
 
-// WriteFiles writes both .te and .fc files to the specified directory
-func WriteFiles(outputDir string, policy *models.SELinuxPolicy) error {
-	// This will be implemented to actually write files to disk
-	// For now, just validate the policy
-	if policy == nil {
-		return fmt.Errorf("policy cannot be nil")
-	}
-
-	if policy.ModuleName == "" {
-		return fmt.Errorf("policy module name cannot be empty")
-	}
-
-	// TODO: Implement actual file writing
-	return nil
-}
+// Note: File writing is handled by the CLI command directly
+// using the individual generators (TEGenerator, FCGenerator, IFGenerator)

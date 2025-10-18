@@ -18,7 +18,7 @@ func TestPathMapper_ConvertToSELinuxPattern(t *testing.T) {
 		{
 			name:            "wildcard in middle",
 			casbinPath:      "/etc/*.conf",
-			expectedPattern: "/etc/[^/]+\\\\.conf",
+			expectedPattern: "/etc/[^/]+\\.conf",
 		},
 		{
 			name:            "nested directory wildcard",
@@ -33,12 +33,12 @@ func TestPathMapper_ConvertToSELinuxPattern(t *testing.T) {
 		{
 			name:            "no wildcard",
 			casbinPath:      "/etc/httpd/conf/httpd.conf",
-			expectedPattern: "/etc/httpd/conf/httpd\\\\.conf",
+			expectedPattern: "/etc/httpd/conf/httpd\\.conf",
 		},
 		{
 			name:            "multiple wildcards",
 			casbinPath:      "/var/*/logs/*.log",
-			expectedPattern: "/var/[^/]+/logs/[^/]+\\\\.log",
+			expectedPattern: "/var/[^/]+/logs/[^/]+\\.log",
 		},
 	}
 
@@ -298,7 +298,7 @@ func TestGenerateRecursivePatterns(t *testing.T) {
 			name:             "Non-recursive file",
 			path:             "/etc/httpd.conf",
 			expectedPatterns: 1,
-			expectedPattern:  "/etc/httpd\\\\.conf",
+			expectedPattern:  "/etc/httpd\\.conf",
 		},
 	}
 

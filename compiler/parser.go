@@ -166,6 +166,7 @@ func (p *Parser) parseModel() (*models.PMLModel, error) {
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
 	currentSection := ""
+	hasContent := false
 
 	for scanner.Scan() {
 		lineNum++
@@ -175,6 +176,8 @@ func (p *Parser) parseModel() (*models.PMLModel, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
+
+		hasContent = true
 
 		// Check if this is a section header
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
@@ -226,6 +229,15 @@ func (p *Parser) parseModel() (*models.PMLModel, error) {
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading model file: %w", err)
+	}
+
+	// Check if the model file was empty
+	if !hasContent {
+		return nil, &ParseError{
+			File:    p.modelPath,
+			Line:    0,
+			Message: "empty model file",
+		}
 	}
 
 	return model, nil
@@ -287,13 +299,23 @@ func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, error) {
 					Message: fmt.Sprintf("policy rule expects 6 fields, got %d: %s", len(fields), line),
 				}
 			}
+			// Validate effect field
+			effect := strings.TrimSpace(fields[5])
+			if effect != "allow" && effect != "deny" {
+				return nil, nil, &ParseError{
+					File:    p.policyPath,
+					Line:    lineNum,
+					Message: fmt.Sprintf("invalid effect '%s', must be 'allow' or 'deny'", effect),
+				}
+			}
+
 			policies = append(policies, models.Policy{
 				Type:    ruleType,
 				Subject: strings.TrimSpace(fields[1]),
 				Object:  strings.TrimSpace(fields[2]),
 				Action:  strings.TrimSpace(fields[3]),
 				Class:   strings.TrimSpace(fields[4]),
-				Effect:  strings.TrimSpace(fields[5]),
+				Effect:  effect,
 			})
 
 		case "g", "g2", "g3":

@@ -39,11 +39,17 @@ func (pm *PathMapper) ConvertToSELinuxPattern(casbinPath string) string {
 
 	pattern := casbinPath
 
-	// Check if * is at the end of the path (before escaping)
+	// Handle recursive patterns ending with /*
 	if strings.HasSuffix(pattern, "/*") {
 		// /var/www/* → /var/www(/.*)?
 		base := strings.TrimSuffix(pattern, "/*")
-		base = escapeRegexChars(base)
+		// Handle wildcards in the base path first
+		if strings.Contains(base, "*") {
+			base = escapeRegexCharsPreservingWildcards(base)
+			base = strings.ReplaceAll(base, "*", "[^/]+")
+		} else {
+			base = escapeRegexChars(base)
+		}
 		return base + "(/.*)?"
 	}
 
@@ -62,10 +68,11 @@ func (pm *PathMapper) ConvertToSELinuxPattern(casbinPath string) string {
 
 // escapeRegexChars escapes special regex characters except * and ?
 func escapeRegexChars(s string) string {
-	// Characters that need escaping in regex
-	specialChars := []string{".", "+", "(", ")", "[", "]", "{", "}", "^", "$", "|", "\\"}
+	// Escape backslash first to avoid double-escaping
+	result := strings.ReplaceAll(s, "\\", "\\\\")
 
-	result := s
+	// Then escape other special characters
+	specialChars := []string{".", "+", "(", ")", "[", "]", "{", "}", "^", "$", "|", "-"}
 	for _, char := range specialChars {
 		result = strings.ReplaceAll(result, char, "\\"+char)
 	}
@@ -75,10 +82,11 @@ func escapeRegexChars(s string) string {
 
 // escapeRegexCharsPreservingWildcards escapes regex chars but preserves * and ?
 func escapeRegexCharsPreservingWildcards(s string) string {
-	// Characters that need escaping in regex
-	specialChars := []string{".", "+", "(", ")", "[", "]", "{", "}", "^", "$", "|", "\\"}
+	// Escape backslash first to avoid double-escaping
+	result := strings.ReplaceAll(s, "\\", "\\\\")
 
-	result := s
+	// Then escape other special characters (but keep * and ? for later processing)
+	specialChars := []string{".", "+", "(", ")", "[", "]", "{", "}", "^", "$", "|", "-"}
 	for _, char := range specialChars {
 		result = strings.ReplaceAll(result, char, "\\"+char)
 	}
@@ -178,7 +186,7 @@ func (pm *PathMapper) InferFileType(path string) string {
 	}
 
 	// Check file extensions for regular files
-	fileExtensions := []string{".conf", ".cfg", ".txt", ".log", ".html", ".htm", ".php", ".py", ".sh"}
+	fileExtensions := []string{".conf", ".cfg", ".txt", ".log", ".html", ".htm", ".php", ".py", ".sh", ".so", ".a"}
 	for _, ext := range fileExtensions {
 		if strings.HasSuffix(path, ext) || strings.Contains(path, ext) {
 			return "regular file"
@@ -230,12 +238,36 @@ func (pm *PathMapper) ValidatePattern(pattern string) error {
 	return nil
 }
 
-// NormalizePath normalizes a path by removing trailing slashes (except root)
+// NormalizePath normalizes a path by removing trailing slashes and double slashes
 func NormalizePath(path string) string {
+	if path == "" {
+		return ""
+	}
+
+	// Handle root path specially
 	if path == "/" {
 		return path
 	}
-	return strings.TrimRight(path, "/")
+
+	// Replace multiple consecutive slashes with single slash
+	normalized := ""
+	prevChar := byte(0)
+	for i := 0; i < len(path); i++ {
+		char := path[i]
+		if char == '/' && prevChar == '/' {
+			continue // Skip consecutive slashes
+		}
+		normalized += string(char)
+		prevChar = char
+	}
+
+	// Remove trailing slash (except for root)
+	normalized = strings.TrimRight(normalized, "/")
+	if normalized == "" {
+		return "/"
+	}
+
+	return normalized
 }
 
 // ExtractBasePath extracts the base path without wildcards

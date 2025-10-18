@@ -45,6 +45,15 @@ func (tm *TypeMapper) PathToType(path string) string {
 	// Normalize the path
 	basePath = NormalizePath(basePath)
 
+	// Handle empty or root path
+	if basePath == "" || basePath == "/" {
+		if tm.modulePrefix != "" {
+			sanitizedPrefix := strings.ReplaceAll(tm.modulePrefix, "-", "_")
+			return sanitizedPrefix + "_t"
+		}
+		return "default_t"
+	}
+
 	// Remove leading slash and convert to type name
 	typeName := strings.TrimPrefix(basePath, "/")
 
@@ -54,12 +63,24 @@ func (tm *TypeMapper) PathToType(path string) string {
 	// Replace dashes with underscores
 	typeName = strings.ReplaceAll(typeName, "-", "_")
 
-	// Remove any dots (for file extensions)
+	// Replace dots with underscores (for file extensions)
 	typeName = strings.ReplaceAll(typeName, ".", "_")
+
+	// Replace other special characters with underscores
+	typeName = strings.ReplaceAll(typeName, "+", "_")
+	typeName = strings.ReplaceAll(typeName, "*", "")
 
 	// Clean up any double underscores
 	for strings.Contains(typeName, "__") {
 		typeName = strings.ReplaceAll(typeName, "__", "_")
+	}
+
+	// Trim leading and trailing underscores
+	typeName = strings.Trim(typeName, "_")
+
+	// Handle empty result after cleanup
+	if typeName == "" {
+		typeName = "data"
 	}
 
 	// Add module prefix and _t suffix
