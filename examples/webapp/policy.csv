@@ -1,0 +1,29 @@
+# Simple Web Application Policy
+# Scenario: A web app that binds to port 8080, reads config, writes logs, and manages data files
+# Using standard Casbin triple format (sub, obj, act, eft)
+# Class information encoded in object using ::class suffix or auto-inferred from path/action
+
+# Execute binary (auto-inferred: executable file → class=file)
+p, myweb_t, /opt/myweb/bin/myweb, execute, allow
+
+# Read configuration files (auto-inferred: directory path → class=file for read action)
+p, myweb_t, /opt/myweb/config(/.*)?, read, allow
+
+# Write and create data files
+p, myweb_t, /var/lib/myweb(/.*)?, read, allow
+p, myweb_t, /var/lib/myweb(/.*)?, write, allow
+p, myweb_t, /var/lib/myweb(/.*)?, create, allow
+
+# Directory operations (explicitly specify ::dir for directory-specific actions)
+p, myweb_t, /var/lib/myweb(/.*)?, search::dir, allow
+p, myweb_t, /var/lib/myweb(/.*)?, add_name::dir, allow
+
+# Append to log files
+p, myweb_t, /var/log/myweb(/.*)?, append, allow
+p, myweb_t, /var/log/myweb(/.*)?, write, allow
+
+# Bind to TCP port 8080 (tcp: prefix auto-infers tcp_socket class)
+p, myweb_t, tcp:8080, name_bind, allow
+
+# Capability to bind to privileged ports (self object indicates process capability)
+p, myweb_t, self::capability, net_bind_service, allow

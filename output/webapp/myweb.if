@@ -1,0 +1,66 @@
+## <summary>
+##	myweb policy module
+## </summary>
+
+########################################
+## <summary>
+##	Read myweb files.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+interface(`myweb_read_files',`
+	gen_require(`
+		type myweb_opt_myweb_bin_myweb_t;
+		type myweb_opt_myweb_config_t;
+		type myweb_var_lib_myweb_t;
+		type myweb_var_log_myweb_t;
+	')
+
+	allow $1 myweb_var_lib_myweb_t:file read_file_perms;
+	allow $1 myweb_var_log_myweb_t:file read_file_perms;
+	allow $1 myweb_opt_myweb_bin_myweb_t:file read_file_perms;
+	allow $1 myweb_opt_myweb_config_t:file read_file_perms;
+')
+
+########################################
+## <summary>
+##	Write myweb files.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+interface(`myweb_write_files',`
+	gen_require(`
+		type myweb_var_lib_myweb_t;
+		type myweb_var_log_myweb_t;
+	')
+
+	allow $1 myweb_var_lib_myweb_t:file write_file_perms;
+	allow $1 myweb_var_log_myweb_t:file write_file_perms;
+')
+
+########################################
+## <summary>
+##	Execute myweb files.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+interface(`myweb_exec',`
+	gen_require(`
+		type myweb_opt_myweb_bin_myweb_t;
+	')
+
+	can_exec($1, myweb_opt_myweb_bin_myweb_t)
+')
+
