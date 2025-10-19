@@ -95,10 +95,19 @@ func (p *Parser) Decode(pml *models.ParsedPML) (*models.DecodedPML, error) {
 }
 
 // decodePolicy decodes a standard policy into DecodedPolicy
-// Extracts class information from object field or infers it
+// Extracts class information from object field or action field, or infers it
 func (p *Parser) decodePolicy(policy *models.Policy) (*models.DecodedPolicy, error) {
 	decoded := &models.DecodedPolicy{
 		Policy: *policy,
+	}
+
+	// Extract class from action if explicitly specified (format: "action::class")
+	action := policy.Action
+	var explicitClass string
+	if strings.Contains(action, "::") {
+		parts := strings.SplitN(action, "::", 2)
+		decoded.Action = parts[0]
+		explicitClass = parts[1]
 	}
 
 	// Extract class from object if explicitly specified (format: "path::class")
@@ -106,10 +115,17 @@ func (p *Parser) decodePolicy(policy *models.Policy) (*models.DecodedPolicy, err
 	if strings.Contains(objPath, "::") {
 		parts := strings.SplitN(objPath, "::", 2)
 		decoded.Object = parts[0]
-		decoded.Class = parts[1]
+		if explicitClass == "" {
+			explicitClass = parts[1]
+		}
+	}
+
+	// Use explicit class if provided, otherwise infer
+	if explicitClass != "" {
+		decoded.Class = explicitClass
 	} else {
 		// Auto-infer class from object and action
-		decoded.Class = inferClass(objPath, policy.Action)
+		decoded.Class = inferClass(objPath, decoded.Action)
 	}
 
 	// Check if object contains a condition (?cond=)
@@ -120,7 +136,7 @@ func (p *Parser) decodePolicy(policy *models.Policy) (*models.DecodedPolicy, err
 	}
 
 	// Check if this is a type transition (p2 with action="transition")
-	if policy.Type == "p2" && policy.Action == "transition" {
+	if policy.Type == "p2" && decoded.Action == "transition" {
 		decoded.IsTransition = true
 		decoded.TransitionInfo = &models.TransitionInfo{
 			SourceType: policy.Subject,

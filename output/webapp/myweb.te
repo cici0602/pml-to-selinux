@@ -10,22 +10,22 @@ policy_module(myweb, 1.0.0)
 # Type Declarations
 ########################################
 
-type myweb_opt_myweb_bin_myweb_t;
-type myweb_opt_myweb_config_t;
-type myweb_t;
-type myweb_var_lib_myweb_t;
-type myweb_var_log_myweb_t;
+type myweb_t, domain;
+type opt_myweb_bin_myweb_t, file_type;
+type opt_myweb_config_t, file_type;
+type var_lib_myweb_t, file_type;
+type var_log_myweb_t, file_type, logfile;
 
 ########################################
 # Allow Rules
 ########################################
 
 # Rules for myweb_t
-allow myweb_t myweb_opt_myweb_bin_myweb_t:file { execute execute_no_trans getattr open read };
-allow myweb_t myweb_opt_myweb_config_t:file { getattr open read };
-allow myweb_t myweb_var_lib_myweb_t:dir { add_name getattr search write };
-allow myweb_t myweb_var_lib_myweb_t:file { append create getattr open read write };
-allow myweb_t myweb_var_log_myweb_t:file { append open write };
-allow myweb_t self_t:file net_bind_service;
-allow myweb_t tcp:8080_t name_bind;
+allow myweb_t opt_myweb_bin_myweb_t:file { execute execute_no_trans getattr open read };
+allow myweb_t opt_myweb_config_t:file { getattr open read };
+allow myweb_t self:capability net_bind_service;
+allow myweb_t self:tcp_socket name_bind;
+allow myweb_t var_lib_myweb_t:dir { add_name getattr remove_name search write };
+allow myweb_t var_lib_myweb_t:file { append create getattr open read write };
+allow myweb_t var_log_myweb_t:file { append open write };
 

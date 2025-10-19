@@ -4,6 +4,115 @@ import (
 	"testing"
 )
 
+// TestPathMapper_ConvertToSELinuxPattern tests basic pattern conversion
+func TestPathMapper_ConvertToSELinuxPattern(t *testing.T) {
+	mapper := NewPathMapper()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple recursive pattern",
+			input:    "/var/www/*",
+			expected: "/var/www(/.*)?",
+		},
+		{
+			name:     "exact path",
+			input:    "/etc/passwd",
+			expected: "/etc/passwd",
+		},
+		{
+			name:     "wildcard in filename",
+			input:    "/etc/*.conf",
+			expected: "/etc/[^/]+\\.conf",
+		},
+		{
+			name:     "nested recursive",
+			input:    "/var/log/httpd/*",
+			expected: "/var/log/httpd(/.*)?",
+		},
+		{
+			name:     "home directory wildcard",
+			input:    "/home/*/public_html",
+			expected: "/home/[^/]+/public_html",
+		},
+		{
+			name:     "double star pattern",
+			input:    "/usr/**/bin",
+			expected: "/usr/.*/bin",
+		},
+		{
+			name:     "brace expansion",
+			input:    "/var/{log,tmp}/*",
+			expected: "/var/(log|tmp)(/.*)?",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mapper.ConvertToSELinuxPattern(tt.input)
+			if result != tt.expected {
+				t.Errorf("ConvertToSELinuxPattern(%q) = %q, want %q",
+					tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestPathMapper_IsDirectoryPattern tests directory pattern detection
+func TestPathMapper_IsDirectoryPattern(t *testing.T) {
+	mapper := NewPathMapper()
+
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"/var/www/", true},
+		{"/var/www/*", true},
+		{"/etc/", true},
+		{"/etc/passwd", false},
+		{"/var/log/messages", false},
+		{"/bin", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			result := mapper.IsDirectoryPattern(tt.path)
+			if result != tt.expected {
+				t.Errorf("IsDirectoryPattern(%q) = %v, want %v",
+					tt.path, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestPathMapper_IsRecursivePattern tests recursive pattern detection
+func TestPathMapper_IsRecursivePattern(t *testing.T) {
+	mapper := NewPathMapper()
+
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"/var/www/*", true},
+		{"/etc/*.conf", false},
+		{"/home/*/public", false},
+		{"/var/log/httpd/*", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			result := mapper.IsRecursivePattern(tt.path)
+			if result != tt.expected {
+				t.Errorf("IsRecursivePattern(%q) = %v, want %v",
+					tt.path, result, tt.expected)
+			}
+		})
+	}
+}
+
 // TestPathMapper_DeviceFiles tests device file type inference
 func TestPathMapper_DeviceFiles(t *testing.T) {
 	mapper := NewPathMapper()

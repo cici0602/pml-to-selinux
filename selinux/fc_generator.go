@@ -89,20 +89,27 @@ func (g *FCGenerator) writeFileContexts(builder *strings.Builder) error {
 
 // writeFileContext writes a single file context specification
 func (g *FCGenerator) writeFileContext(builder *strings.Builder, fc models.FileContext) error {
-	// Get file type specifier (e.g., "--" for file, "-d" for directory)
+	// Get file type specifier (e.g., "--" for file, "-d" for directory, "" for all types)
 	fileTypeSpec := fc.FileType
 	if fileTypeSpec == "" {
-		fileTypeSpec = "--" // default to regular file
+		// Empty file type means match all file types - no specifier needed
+		fileTypeSpec = ""
 	}
 
 	// Build the full SELinux context: system_u:object_r:type_t:s0
 	context := fmt.Sprintf("system_u:object_r:%s:s0", fc.SELinuxType)
 
-	// Format: /path/pattern file_type_spec gen_context(system_u:object_r:type_t:s0)
-	builder.WriteString(fmt.Sprintf("%s\t%s\tgen_context(%s)\n",
-		fc.PathPattern,
-		fileTypeSpec,
-		context))
+	// Format with or without file type specifier
+	if fileTypeSpec == "" {
+		builder.WriteString(fmt.Sprintf("%s\tgen_context(%s)\n",
+			fc.PathPattern,
+			context))
+	} else {
+		builder.WriteString(fmt.Sprintf("%s\t%s\tgen_context(%s)\n",
+			fc.PathPattern,
+			fileTypeSpec,
+			context))
+	}
 
 	return nil
 }

@@ -4,7 +4,8 @@ import (
 	"testing"
 )
 
-func TestMapAction(t *testing.T) {
+// TestActionMapper_BasicMappings tests basic action to permission mappings
+func TestActionMapper_BasicMappings(t *testing.T) {
 	am := NewActionMapper()
 
 	tests := []struct {
@@ -36,6 +37,27 @@ func TestMapAction(t *testing.T) {
 			expectedPerms: []string{"execute", "read", "open", "getattr", "execute_no_trans"},
 		},
 		{
+			name:          "Create file",
+			action:        "create",
+			objectClass:   "",
+			expectedClass: "file",
+			expectedPerms: []string{"create", "write", "open"},
+		},
+		{
+			name:          "Delete file",
+			action:        "delete",
+			objectClass:   "",
+			expectedClass: "file",
+			expectedPerms: []string{"unlink"},
+		},
+		{
+			name:          "Append to file",
+			action:        "append",
+			objectClass:   "",
+			expectedClass: "file",
+			expectedPerms: []string{"append", "open"},
+		},
+		{
 			name:          "Search directory",
 			action:        "search",
 			objectClass:   "",
@@ -43,11 +65,25 @@ func TestMapAction(t *testing.T) {
 			expectedPerms: []string{"search", "getattr"},
 		},
 		{
-			name:          "Network bind",
-			action:        "bind",
+			name:          "List directory",
+			action:        "list",
 			objectClass:   "",
-			expectedClass: "tcp_socket",
-			expectedPerms: []string{"bind"},
+			expectedClass: "dir",
+			expectedPerms: []string{"read", "search", "getattr"},
+		},
+		{
+			name:          "Add name to directory",
+			action:        "add_name",
+			objectClass:   "",
+			expectedClass: "dir",
+			expectedPerms: []string{"add_name", "write"},
+		},
+		{
+			name:          "Remove name from directory",
+			action:        "remove_name",
+			objectClass:   "",
+			expectedClass: "dir",
+			expectedPerms: []string{"remove_name", "write"},
 		},
 	}
 
@@ -61,16 +97,167 @@ func TestMapAction(t *testing.T) {
 			}
 
 			if len(perms) != len(tt.expectedPerms) {
-				t.Errorf("MapAction(%s, %s) perms count = %d, want %d",
-					tt.action, tt.objectClass, len(perms), len(tt.expectedPerms))
+				t.Errorf("MapAction(%s, %s) perms count = %d, want %d. Got: %v, Want: %v",
+					tt.action, tt.objectClass, len(perms), len(tt.expectedPerms), perms, tt.expectedPerms)
+			}
+
+			// Check that all expected permissions are present
+			for _, expectedPerm := range tt.expectedPerms {
+				found := false
+				for _, perm := range perms {
+					if perm == expectedPerm {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected permission %s not found in %v for action %s",
+						expectedPerm, perms, tt.action)
+				}
 			}
 		})
 	}
 }
 
-func TestActionMapperAddCustomMapping(t *testing.T) {
+// TestActionMapper_NetworkOperations tests network-related action mappings
+func TestActionMapper_NetworkOperations(t *testing.T) {
+	mapper := NewActionMapper()
+
+	networkActions := []struct {
+		action        string
+		expectedClass string
+		requiredPerms []string
+	}{
+		{"bind", "tcp_socket", []string{"bind"}},
+		{"connect", "tcp_socket", []string{"connect"}},
+		{"listen", "tcp_socket", []string{"listen"}},
+		{"accept", "tcp_socket", []string{"accept"}},
+		{"send", "tcp_socket", []string{"send"}},
+		{"recv", "tcp_socket", []string{"recv"}},
+	}
+
+	for _, test := range networkActions {
+		t.Run("network_"+test.action, func(t *testing.T) {
+			class, perms := mapper.MapAction(test.action, "")
+
+			if class != test.expectedClass {
+				t.Errorf("Expected class %s, got %s", test.expectedClass, class)
+			}
+
+			for _, reqPerm := range test.requiredPerms {
+				found := false
+				for _, perm := range perms {
+					if perm == reqPerm {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Required permission %s not found in %v for action %s",
+						reqPerm, perms, test.action)
+				}
+			}
+		})
+	}
+}
+
+// TestActionMapper_ProcessOperations tests process-related action mappings
+func TestActionMapper_ProcessOperations(t *testing.T) {
+	mapper := NewActionMapper()
+
+	processActions := []struct {
+		action        string
+		expectedClass string
+		requiredPerms []string
+	}{
+		{"transition", "process", []string{"transition"}},
+		{"signal", "process", []string{"signal"}},
+		{"getattr_process", "process", []string{"getattr"}},
+		{"sigkill", "process", []string{"sigkill"}},
+		{"sigstop", "process", []string{"sigstop"}},
+	}
+
+	for _, test := range processActions {
+		t.Run("process_"+test.action, func(t *testing.T) {
+			class, perms := mapper.MapAction(test.action, "")
+
+			if class != test.expectedClass {
+				t.Errorf("Expected class %s, got %s", test.expectedClass, class)
+			}
+
+			for _, reqPerm := range test.requiredPerms {
+				found := false
+				for _, perm := range perms {
+					if perm == reqPerm {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Required permission %s not found in %v for action %s",
+						reqPerm, perms, test.action)
+				}
+			}
+		})
+	}
+}
+
+// TestActionMapper_ClassAdaptation tests class adaptation functionality
+func TestActionMapper_ClassAdaptation(t *testing.T) {
+	mapper := NewActionMapper()
+
+	testCases := []struct {
+		action        string
+		objectClass   string
+		expectedClass string
+	}{
+		{"read", "", "file"},                                    // Default to file
+		{"read", "dir", "dir"},                                  // Adapt to dir
+		{"read", "lnk_file", "lnk_file"},                        // Adapt to link file
+		{"connect", "", "tcp_socket"},                           // Default to tcp_socket
+		{"connect", "unix_stream_socket", "unix_stream_socket"}, // Adapt to unix socket
+	}
+
+	for _, test := range testCases {
+		t.Run(test.action+"_"+test.objectClass, func(t *testing.T) {
+			class, _ := mapper.MapAction(test.action, test.objectClass)
+
+			if class != test.expectedClass {
+				t.Errorf("Expected class %s, got %s for action %s with object class %s",
+					test.expectedClass, class, test.action, test.objectClass)
+			}
+		})
+	}
+}
+
+// TestActionMapper_UnknownActions tests handling of unknown actions
+func TestActionMapper_UnknownActions(t *testing.T) {
+	mapper := NewActionMapper()
+
+	unknownActions := []string{"unknown_action", "custom_operation", "special_task"}
+
+	for _, action := range unknownActions {
+		t.Run("unknown_"+action, func(t *testing.T) {
+			class, perms := mapper.MapAction(action, "")
+
+			// Should default to file class
+			if class != "file" {
+				t.Errorf("Expected default class 'file', got %s", class)
+			}
+
+			// Should return action as permission
+			if len(perms) != 1 || perms[0] != action {
+				t.Errorf("Expected [%s], got %v", action, perms)
+			}
+		})
+	}
+}
+
+// TestActionMapper_CustomMappings tests custom mapping functionality
+func TestActionMapper_CustomMappings(t *testing.T) {
 	am := NewActionMapper()
 
+	// Add custom mapping
 	am.AddCustomMapping("deploy", "file", []string{"write", "create", "setattr"})
 
 	class, perms := am.MapAction("deploy", "")
@@ -83,8 +270,15 @@ func TestActionMapperAddCustomMapping(t *testing.T) {
 	if len(perms) != len(expectedPerms) {
 		t.Errorf("Custom mapping perms count = %d, want %d", len(perms), len(expectedPerms))
 	}
+
+	for i, expectedPerm := range expectedPerms {
+		if i >= len(perms) || perms[i] != expectedPerm {
+			t.Errorf("Expected permission %s at index %d, got %v", expectedPerm, i, perms)
+		}
+	}
 }
 
+// TestMapActionWithClass tests action mapping with specific class
 func TestMapActionWithClass(t *testing.T) {
 	am := NewActionMapper()
 
@@ -114,13 +308,14 @@ func TestMapActionWithClass(t *testing.T) {
 			perms := am.MapActionWithClass(tt.action, tt.class)
 
 			if len(perms) != len(tt.expectedPerms) {
-				t.Errorf("MapActionWithClass(%s, %s) perms count = %d, want %d",
-					tt.action, tt.class, len(perms), len(tt.expectedPerms))
+				t.Errorf("MapActionWithClass(%s, %s) perms count = %d, want %d. Got: %v, Want: %v",
+					tt.action, tt.class, len(perms), len(tt.expectedPerms), perms, tt.expectedPerms)
 			}
 		})
 	}
 }
 
+// TestExpandActionSet tests action set expansion
 func TestExpandActionSet(t *testing.T) {
 	am := NewActionMapper()
 
@@ -181,6 +376,7 @@ func TestExpandActionSet(t *testing.T) {
 	}
 }
 
+// TestGenerateAllowRule tests SELinux allow rule generation
 func TestGenerateAllowRule(t *testing.T) {
 	am := NewActionMapper()
 
@@ -220,6 +416,7 @@ func TestGenerateAllowRule(t *testing.T) {
 	}
 }
 
+// TestGetSupportedActions tests getting list of supported actions
 func TestGetSupportedActions(t *testing.T) {
 	am := NewActionMapper()
 
@@ -245,6 +442,7 @@ func TestGetSupportedActions(t *testing.T) {
 	}
 }
 
+// TestGetSupportedClasses tests getting list of supported classes
 func TestGetSupportedClasses(t *testing.T) {
 	am := NewActionMapper()
 
@@ -270,6 +468,7 @@ func TestGetSupportedClasses(t *testing.T) {
 	}
 }
 
+// TestLoadCustomMappingsFromConfig tests loading custom mappings from config
 func TestLoadCustomMappingsFromConfig(t *testing.T) {
 	am := NewActionMapper()
 
@@ -296,6 +495,7 @@ func TestLoadCustomMappingsFromConfig(t *testing.T) {
 	}
 }
 
+// TestExportMappings tests exporting all mappings
 func TestExportMappings(t *testing.T) {
 	am := NewActionMapper()
 
@@ -322,6 +522,7 @@ func TestExportMappings(t *testing.T) {
 	}
 }
 
+// TestValidateMapping tests mapping validation
 func TestValidateMapping(t *testing.T) {
 	am := NewActionMapper()
 

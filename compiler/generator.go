@@ -53,10 +53,11 @@ func (g *Generator) Generate() (*models.SELinuxPolicy, error) {
 	}
 
 	// Extract types from subjects and objects
-	types := g.extractTypes()
-	for typeName := range types {
+	typeMap := g.extractTypes()
+	for typeName, attrs := range typeMap {
 		policy.Types = append(policy.Types, models.TypeDeclaration{
-			TypeName: typeName,
+			TypeName:   typeName,
+			Attributes: attrs,
 		})
 	}
 
@@ -92,31 +93,63 @@ func (g *Generator) inferModuleName() string {
 	return "myapp"
 }
 
-// extractTypes extracts unique type names from subjects and objects
-func (g *Generator) extractTypes() map[string]bool {
-	types := make(map[string]bool)
+// extractTypes extracts unique type names from subjects and objects and assigns attributes
+func (g *Generator) extractTypes() map[string][]string {
+	typeAttrs := make(map[string][]string)
 
 	for _, policy := range g.decoded.Policies {
-		// Add subject type
+		// Add subject type - usually a domain type
 		subjectType := g.typeMapper.SubjectToType(policy.Subject)
-		types[subjectType] = true
+		if _, exists := typeAttrs[subjectType]; !exists {
+			// Subject types are typically domain types
+			typeAttrs[subjectType] = []string{"domain"}
+		}
 
 		// Add object type from path (use decoded object without condition)
 		objPath := policy.Object
 		if strings.HasPrefix(objPath, "/") {
 			objectType := g.typeMapper.PathToType(objPath)
-			types[objectType] = true
+			if _, exists := typeAttrs[objectType]; !exists {
+				// Determine attributes based on the class and path
+				attrs := g.inferTypeAttributes(objPath, policy.Class)
+				typeAttrs[objectType] = attrs
+			}
 		}
 	}
 
 	// Add types from transitions
 	for _, trans := range g.decoded.Transitions {
-		types[trans.SourceType] = true
-		types[trans.TargetType] = true
-		types[trans.NewType] = true
+		if _, exists := typeAttrs[trans.SourceType]; !exists {
+			typeAttrs[trans.SourceType] = []string{"domain"}
+		}
+		if _, exists := typeAttrs[trans.TargetType]; !exists {
+			// Target type in transition is typically an exec_type
+			typeAttrs[trans.TargetType] = []string{"file_type", "exec_type"}
+		}
+		if _, exists := typeAttrs[trans.NewType]; !exists {
+			typeAttrs[trans.NewType] = []string{"domain"}
+		}
 	}
 
-	return types
+	return typeAttrs
+}
+
+// inferTypeAttributes infers SELinux type attributes based on path and class
+func (g *Generator) inferTypeAttributes(path string, class string) []string {
+	// Common file type attribute for all file-related types
+	attrs := []string{"file_type"}
+
+	// Add specific attributes based on path patterns
+	if strings.HasPrefix(path, "/usr/bin") || strings.HasPrefix(path, "/usr/sbin") ||
+		strings.HasPrefix(path, "/bin") || strings.HasPrefix(path, "/sbin") {
+		attrs = append(attrs, "exec_type")
+	} else if strings.HasPrefix(path, "/var/log") {
+		attrs = append(attrs, "logfile")
+	} else if strings.HasPrefix(path, "/etc") {
+		attrs = append(attrs, "configfile")
+	}
+
+	return attrs
 }
 
 // convertPolicies converts decoded PML policies to SELinux rules
@@ -124,16 +157,33 @@ func (g *Generator) convertPolicies(policy *models.SELinuxPolicy) error {
 	for _, pmlPolicy := range g.decoded.Policies {
 		sourceType := g.typeMapper.SubjectToType(pmlPolicy.Subject)
 
-		// Determine target type based on object
+		// Determine target type and class based on object
 		var targetType string
-		if strings.HasPrefix(pmlPolicy.Object, "/") {
+		class := pmlPolicy.Class // Use the decoded class
+
+		// Handle special objects
+		if pmlPolicy.Object == "self" {
+			targetType = "self"
+		} else if strings.HasPrefix(pmlPolicy.Object, "tcp:") || strings.HasPrefix(pmlPolicy.Object, "udp:") {
+			// Network port binding - handle specially
+			// Extract port number
+			parts := strings.SplitN(pmlPolicy.Object, ":", 2)
+			if len(parts) == 2 {
+				// For port binding, we need to generate port type
+				// For now, we'll use a generic approach
+				targetType = "self"
+				// The class should already be tcp_socket or udp_socket from decode
+			}
+		} else if strings.HasPrefix(pmlPolicy.Object, "/") {
+			// File system path
 			targetType = g.typeMapper.PathToType(pmlPolicy.Object)
 		} else {
+			// Other objects (treat as type name)
 			targetType = g.typeMapper.SubjectToType(pmlPolicy.Object)
 		}
 
-		// Map action to SELinux class and permissions
-		class, perms := g.actionToPermissions(pmlPolicy.Action)
+		// Map action to permissions using the decoded class
+		_, perms := g.actionMapper.MapAction(pmlPolicy.Action, class)
 
 		if pmlPolicy.Effect == "allow" {
 			rule := models.AllowRule{

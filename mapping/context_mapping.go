@@ -42,6 +42,11 @@ func (pm *PathMapper) ConvertToSELinuxPattern(casbinPath string) string {
 
 	pattern := casbinPath
 
+	// If pattern already contains SELinux regex patterns like (/.*), return as-is
+	if strings.Contains(pattern, "(/.*)?") || strings.Contains(pattern, "(/.*)") {
+		return pattern
+	}
+
 	// Handle brace expansion {a,b,c} → (a|b|c) BEFORE escaping
 	hasBraceExpansion := strings.Contains(pattern, "{")
 	pattern = pm.expandBraces(pattern)
@@ -201,9 +206,10 @@ func (pm *PathMapper) GenerateRecursivePatterns(path string) []PathPattern {
 	escapedBase := escapeRegexChars(basePath)
 
 	// Pattern for all files and subdirectories: /base(/.*)?
+	// Use empty FileType to match all file types
 	patterns = append(patterns, PathPattern{
 		Pattern:  escapedBase + "(/.*)?",
-		FileType: "all files",
+		FileType: "", // Empty means match all file types
 	})
 
 	return patterns
@@ -217,16 +223,16 @@ type PathPattern struct {
 
 // InferFileType infers the SELinux file type specification from the path
 // Returns one of: "regular file", "directory", "symlink", "socket", "pipe", "block", "char"
+// Returns empty string for patterns that should match all file types
 func (pm *PathMapper) InferFileType(path string) string {
 	// If path ends with /, it's a directory
 	if strings.HasSuffix(path, "/") {
 		return "directory"
 	}
 
-	// If path ends with /*, it likely refers to contents (which could be any type)
-	// Default to "-d" for directory in these cases
-	if strings.HasSuffix(path, "/*") {
-		return "all files" // This will generate pattern without file type specifier
+	// If path ends with /* or contains regex patterns, match all file types
+	if strings.HasSuffix(path, "/*") || strings.Contains(path, "(/.*)?") || strings.Contains(path, "(.*)") {
+		return "" // Empty string means no file type specifier (match all)
 	}
 
 	// Check for device files (block and character devices)
@@ -287,8 +293,8 @@ func (pm *PathMapper) InferFileType(path string) string {
 		}
 	}
 
-	// Default to all files (no file type specifier)
-	return "all files"
+	// Default to empty string (match all file types)
+	return ""
 }
 
 // GetFileTypeSpecifier returns the SELinux file type specifier for .fc files
