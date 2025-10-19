@@ -151,16 +151,16 @@ func TestValidatePolicies(t *testing.T) {
 		{
 			name: "valid policies",
 			policies: []models.Policy{
-				{Type: "p", Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
-				{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Class: "file", Effect: "allow"},
-				{Subject: "httpd_t", Object: "/usr/bin/*", Action: "write", Class: "file", Effect: "deny"},
+				{Type: "p", Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "allow"},
+				{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Effect: "allow"},
+				{Subject: "httpd_t", Object: "/usr/bin/*", Action: "write", Effect: "deny"},
 			},
 			wantErr: false,
 		},
 		{
 			name: "empty subject",
 			policies: []models.Policy{
-				{Subject: "", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
+				{Subject: "", Object: "/var/www/*", Action: "read", Effect: "allow"},
 			},
 			wantErr: true,
 			errMsg:  "subject cannot be empty",
@@ -168,7 +168,7 @@ func TestValidatePolicies(t *testing.T) {
 		{
 			name: "empty object",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "", Action: "read", Class: "file", Effect: "allow"},
+				{Subject: "httpd_t", Object: "", Action: "read", Effect: "allow"},
 			},
 			wantErr: true,
 			errMsg:  "object cannot be empty",
@@ -176,23 +176,22 @@ func TestValidatePolicies(t *testing.T) {
 		{
 			name: "empty action",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "", Class: "file", Effect: "allow"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "", Effect: "allow"},
 			},
 			wantErr: true,
 			errMsg:  "action cannot be empty",
 		},
 		{
-			name: "empty class",
+			name: "class is auto-inferred from path",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "", Effect: "allow"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "allow"},
 			},
-			wantErr: true,
-			errMsg:  "class cannot be empty",
+			wantErr: false, // Class should be auto-inferred as "file"
 		},
 		{
 			name: "invalid effect",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "maybe"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "maybe"},
 			},
 			wantErr: true,
 			errMsg:  "invalid effect",
@@ -200,7 +199,7 @@ func TestValidatePolicies(t *testing.T) {
 		{
 			name: "invalid path pattern",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "var/www/*", Action: "read", Class: "file", Effect: "allow"},
+				{Subject: "httpd_t", Object: "var/www/*", Action: "read", Effect: "allow"},
 			},
 			wantErr: true,
 			errMsg:  "invalid object pattern",
@@ -208,7 +207,7 @@ func TestValidatePolicies(t *testing.T) {
 		{
 			name: "valid special object type",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "tcp_socket", Action: "bind", Class: "tcp_socket", Effect: "allow"},
+				{Subject: "httpd_t", Object: "tcp:8080::tcp_socket", Action: "bind", Effect: "allow"},
 			},
 			wantErr: false,
 		},
@@ -216,16 +215,22 @@ func TestValidatePolicies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Convert policies to decoded policies
+			// Convert policies to decoded policies with class inference
 			decodedPolicies := make([]models.DecodedPolicy, len(tt.policies))
 			for i, policy := range tt.policies {
-				decodedPolicies[i] = models.DecodedPolicy{Policy: policy}
+				// Parse the policy to extract class information
+				parser := &Parser{}
+				decoded, err := parser.decodePolicy(&policy)
+				if err != nil {
+					t.Fatalf("Failed to decode policy: %v", err)
+				}
+				decodedPolicies[i] = *decoded
 			}
 
 			decoded := &models.DecodedPML{
 				Model: &models.PMLModel{
-					RequestDefinition: map[string][]string{"r": {"sub", "obj", "act", "class"}},
-					PolicyDefinition:  map[string][]string{"p": {"sub", "obj", "act", "class", "eft"}},
+					RequestDefinition: map[string][]string{"r": {"sub", "obj", "act"}},
+					PolicyDefinition:  map[string][]string{"p": {"sub", "obj", "act", "eft"}},
 					Matchers:          "m",
 					Effect:            "e",
 				},
@@ -263,8 +268,8 @@ func TestDetectConflicts(t *testing.T) {
 		{
 			name: "no conflicts - different subjects",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
-				{Subject: "nginx_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "deny"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "allow"},
+				{Subject: "nginx_t", Object: "/var/www/*", Action: "read", Effect: "deny"},
 			},
 			expectConflict: false,
 			conflictCount:  0,
@@ -272,8 +277,8 @@ func TestDetectConflicts(t *testing.T) {
 		{
 			name: "no conflicts - different actions",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "write", Class: "file", Effect: "deny"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "allow"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "write", Effect: "deny"},
 			},
 			expectConflict: false,
 			conflictCount:  0,
@@ -281,8 +286,8 @@ func TestDetectConflicts(t *testing.T) {
 		{
 			name: "conflict - same subject, object, action, class",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "deny"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "allow"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "deny"},
 			},
 			expectConflict: true,
 			conflictCount:  1,
@@ -290,8 +295,8 @@ func TestDetectConflicts(t *testing.T) {
 		{
 			name: "conflict - overlapping paths",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "write", Class: "file", Effect: "allow"},
-				{Subject: "httpd_t", Object: "/var/www/html/*", Action: "write", Class: "file", Effect: "deny"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "write", Effect: "allow"},
+				{Subject: "httpd_t", Object: "/var/www/html/*", Action: "write", Effect: "deny"},
 			},
 			expectConflict: true,
 			conflictCount:  1,
@@ -299,10 +304,10 @@ func TestDetectConflicts(t *testing.T) {
 		{
 			name: "multiple conflicts",
 			policies: []models.Policy{
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
-				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "deny"},
-				{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Class: "file", Effect: "allow"},
-				{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Class: "file", Effect: "deny"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "allow"},
+				{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "deny"},
+				{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Effect: "allow"},
+				{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Effect: "deny"},
 			},
 			expectConflict: true,
 			conflictCount:  2,
@@ -351,11 +356,11 @@ func TestDetectConflicts(t *testing.T) {
 // TestGenerateStats tests statistics generation
 func TestGenerateStats(t *testing.T) {
 	policies := []models.Policy{
-		{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
-		{Subject: "httpd_t", Object: "/var/www/*", Action: "write", Class: "file", Effect: "allow"},
-		{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Class: "file", Effect: "allow"},
-		{Subject: "nginx_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
-		{Subject: "httpd_t", Object: "/usr/bin/*", Action: "write", Class: "file", Effect: "deny"},
+		{Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "allow"},
+		{Subject: "httpd_t", Object: "/var/www/*", Action: "write", Effect: "allow"},
+		{Subject: "httpd_t", Object: "/var/log/*", Action: "write", Effect: "allow"},
+		{Subject: "nginx_t", Object: "/var/www/*", Action: "read", Effect: "allow"},
+		{Subject: "httpd_t", Object: "/usr/bin/*", Action: "write", Effect: "deny"},
 	}
 
 	roles := []models.RoleRelation{
@@ -363,16 +368,21 @@ func TestGenerateStats(t *testing.T) {
 		{Member: "system_u", Role: "system_r"},
 	}
 
-	// Convert policies to decoded policies
+	// Convert policies to decoded policies using parser
+	parser := &Parser{}
 	decodedPolicies := make([]models.DecodedPolicy, len(policies))
 	for i, policy := range policies {
-		decodedPolicies[i] = models.DecodedPolicy{Policy: policy}
+		decoded, err := parser.decodePolicy(&policy)
+		if err != nil {
+			t.Fatalf("Failed to decode policy: %v", err)
+		}
+		decodedPolicies[i] = *decoded
 	}
 
 	decoded := &models.DecodedPML{
 		Model: &models.PMLModel{
-			RequestDefinition: map[string][]string{"r": {"sub", "obj", "act", "class"}},
-			PolicyDefinition:  map[string][]string{"p": {"sub", "obj", "act", "class", "eft"}},
+			RequestDefinition: map[string][]string{"r": {"sub", "obj", "act"}},
+			PolicyDefinition:  map[string][]string{"p": {"sub", "obj", "act", "eft"}},
 			Matchers:          "m",
 			Effect:            "e",
 		},
@@ -428,28 +438,33 @@ func TestGenerateStats(t *testing.T) {
 // TestAnalyzeIntegration tests the full analysis workflow
 func TestAnalyzeIntegration(t *testing.T) {
 	policies := []models.Policy{
-		{Type: "p", Subject: "httpd_t", Object: "/var/www/*", Action: "read", Class: "file", Effect: "allow"},
-		{Type: "p", Subject: "httpd_t", Object: "/var/www/*", Action: "write", Class: "file", Effect: "allow"},
-		{Type: "p", Subject: "httpd_t", Object: "/var/log/*", Action: "write", Class: "file", Effect: "allow"},
+		{Type: "p", Subject: "httpd_t", Object: "/var/www/*", Action: "read", Effect: "allow"},
+		{Type: "p", Subject: "httpd_t", Object: "/var/www/*", Action: "write", Effect: "allow"},
+		{Type: "p", Subject: "httpd_t", Object: "/var/log/*", Action: "write", Effect: "allow"},
 	}
 
 	roles := []models.RoleRelation{
 		{Type: "g", Member: "user_u", Role: "user_r"},
 	}
 
-	// Convert policies to decoded policies
+	// Convert policies to decoded policies using parser
+	parser := &Parser{}
 	decodedPolicies := make([]models.DecodedPolicy, len(policies))
 	for i, policy := range policies {
-		decodedPolicies[i] = models.DecodedPolicy{Policy: policy}
+		decoded, err := parser.decodePolicy(&policy)
+		if err != nil {
+			t.Fatalf("Failed to decode policy: %v", err)
+		}
+		decodedPolicies[i] = *decoded
 	}
 
 	decoded := &models.DecodedPML{
 		Model: &models.PMLModel{
 			RequestDefinition: map[string][]string{
-				"r": {"sub", "obj", "act", "class"},
+				"r": {"sub", "obj", "act"},
 			},
 			PolicyDefinition: map[string][]string{
-				"p": {"sub", "obj", "act", "class", "eft"},
+				"p": {"sub", "obj", "act", "eft"},
 			},
 			RoleDefinition: map[string][]string{
 				"g": {"_", "_"},

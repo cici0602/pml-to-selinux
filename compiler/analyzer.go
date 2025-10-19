@@ -322,11 +322,12 @@ func (a *Analyzer) generateStats() {
 	uniqueActions := make(map[string]bool)
 
 	for _, policy := range a.decoded.Policies {
-		// Count allow rules (deny not supported in MVP)
+		// Count allow and deny rules
 		if policy.Effect == "allow" || policy.Effect == "" {
 			a.stats.AllowRules++
+		} else if policy.Effect == "deny" {
+			a.stats.DenyRules++
 		}
-		// DenyRules count remains 0 in MVP
 
 		// Track unique values
 		uniqueSubjects[policy.Subject] = true
@@ -342,6 +343,12 @@ func (a *Analyzer) generateStats() {
 	a.stats.UniqueSubjects = len(uniqueSubjects)
 	a.stats.UniqueObjects = len(uniqueObjects)
 	a.stats.UniqueActions = len(uniqueActions)
+
+	// Count role relations
+	a.stats.RoleRelations = len(a.decoded.Roles)
+
+	// Count transitions
+	a.stats.Transitions = len(a.decoded.Transitions)
 }
 
 // GetConflicts returns detected policy conflicts

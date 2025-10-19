@@ -1,24 +1,28 @@
 # Background Worker Policy  
 # Scenario: Worker connects to remote services, writes local cache, uses unix socket
+# Using standard Casbin triple format (sub, obj, act, eft)
+# Class information encoded in object using ::class suffix or auto-inferred
 
 # Execute the worker binary
-p, worker_t, /opt/worker/bin/worker, execute, file, allow
+p, worker_t, /opt/worker/bin/worker, execute, allow
 
 # Read/write cache files
-p, worker_t, /var/cache/worker(/.*)?, read, file, allow
-p, worker_t, /var/cache/worker(/.*)?, write, file, allow
-p, worker_t, /var/cache/worker(/.*)?, create, file, allow
-p, worker_t, /var/cache/worker(/.*)?, unlink, file, allow
-p, worker_t, /var/cache/worker(/.*)?, search, dir, allow
-p, worker_t, /var/cache/worker(/.*)?, add_name, dir, allow
-p, worker_t, /var/cache/worker(/.*)?, remove_name, dir, allow
+p, worker_t, /var/cache/worker(/.*)?, read, allow
+p, worker_t, /var/cache/worker(/.*)?, write, allow
+p, worker_t, /var/cache/worker(/.*)?, create, allow
+p, worker_t, /var/cache/worker(/.*)?, unlink, allow
+
+# Directory operations
+p, worker_t, /var/cache/worker(/.*)?, search::dir, allow
+p, worker_t, /var/cache/worker(/.*)?, add_name::dir, allow
+p, worker_t, /var/cache/worker(/.*)?, remove_name::dir, allow
 
 # Connect to unix socket (communicate with other service)
-p, worker_t, /var/run/othersvc.sock, connectto, unix_stream_socket, allow
+p, worker_t, /var/run/othersvc.sock, connectto::unix_stream_socket, allow
 
-# Make outbound TCP connections
-p, worker_t, tcp:*, name_connect, tcp_socket, allow
+# Make outbound TCP connections (tcp:* means any port)
+p, worker_t, tcp:*, name_connect, allow
 
 # Create its own unix socket
-p, worker_t, /var/run/worker.sock, bind, unix_stream_socket, allow
-p, worker_t, /var/run/worker.sock, create, sock_file, allow
+p, worker_t, /var/run/worker.sock, bind::unix_stream_socket, allow
+p, worker_t, /var/run/worker.sock, create::sock_file, allow

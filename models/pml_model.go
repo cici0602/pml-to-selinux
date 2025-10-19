@@ -1,22 +1,25 @@
 package models
 
 // PMLModel represents a Casbin PML model structure
+// Now using standard Casbin triple format: (sub, obj, act)
 type PMLModel struct {
-	RequestDefinition map[string][]string // r = sub, obj, act, class
-	PolicyDefinition  map[string][]string // p = sub, obj, act, class, eft; p2 = sub, obj, act, class, eft
+	RequestDefinition map[string][]string // r = sub, obj, act
+	PolicyDefinition  map[string][]string // p = sub, obj, act, eft; p2 = sub, obj, act, eft
 	RoleDefinition    map[string][]string // g = _, _; g2 = _, _
 	Matchers          string              // Matching rules
 	Effect            string              // Policy effect
 }
 
 // Policy represents a single policy rule from PML
-// This is the standard Casbin policy format, fully compatible
+// This is the standard Casbin triple format (sub, obj, act) with optional effect
+// Class information is encoded in the Object field using format:
+//   - Explicit: "/var/log/myapp::file" or "tcp:8080::tcp_socket"
+//   - Auto-inferred from path patterns (paths → file/dir, tcp:/udp: → socket)
 type Policy struct {
 	Type    string // "p", "p2", etc. - policy definition type
-	Subject string // e.g., "httpd_t"
-	Object  string // e.g., "/var/www/*" or "/home/*?cond=httpd_enable_homedirs"
-	Action  string // e.g., "read", "write", "transition"
-	Class   string // e.g., "file", "dir", "process"
+	Subject string // e.g., "myapp_t" - SELinux domain/type
+	Object  string // e.g., "/var/www/*" or "/var/log/app.log::file" or "tcp:8080::tcp_socket"
+	Action  string // e.g., "read", "write", "execute", "bind", "transition"
 	Effect  string // "allow" or "deny" (for p) or new_type (for p2 transitions)
 }
 
@@ -29,9 +32,11 @@ type RoleRelation struct {
 }
 
 // DecodedPolicy contains decoded policy information
-// This is internal representation after decoding standard PML
+// This is internal representation after decoding standard PML triple format
+// The Class field is extracted from Object field (e.g., "/path::file" → Class="file")
 type DecodedPolicy struct {
 	Policy                         // Embedded standard policy
+	Class          string          // Extracted or inferred SELinux object class (file, dir, tcp_socket, etc.)
 	Condition      string          // Extracted condition (from ?cond= in object)
 	IsTransition   bool            // True if this is a type transition (p2 with action="transition")
 	TransitionInfo *TransitionInfo // Details for type transitions
@@ -41,7 +46,7 @@ type DecodedPolicy struct {
 type TransitionInfo struct {
 	SourceType string // Domain that creates the object
 	TargetType string // Type of the parent object (from Object field)
-	Class      string // Object class (from Class field)
+	Class      string // Object class (extracted from Object or inferred)
 	NewType    string // Resulting type (from Effect field for p2)
 }
 

@@ -8,7 +8,41 @@ This tool follows the **80/20 principle** (Pareto Principle) for SELinux policy 
 
 - **Target Users**: Application developers and system administrators who need to secure their applications
 - **Core Focus**: Cover 80% of common use cases with minimal complexity
+- **Casbin Compatibility**: Uses standard Casbin triple format (sub, obj, act) for easy integration
 - **Not a Goal**: 100% feature parity with native SELinux (which would add unnecessary complexity)
+
+## 📝 Policy Format
+
+This tool uses the **standard Casbin triple format**:
+
+```ini
+[request_definition]
+r = sub, obj, act
+
+[policy_definition]
+p = sub, obj, act, eft
+
+[matchers]
+m = r.sub == p.sub && matchPath(r.obj, p.obj) && r.act == p.act
+```
+
+**Policy Rules** (CSV format):
+```csv
+p, subject_domain, object_path, action, effect
+```
+
+**Class Inference**: The SELinux object class is automatically inferred from the object path and action:
+- File paths (`/var/www/*`) → `file` class
+- Directory actions (`search`, `add_name`) → `dir` class  
+- Network resources (`tcp:8080`) → `tcp_socket` class
+- Unix sockets (`/var/run/app.sock`) → `unix_stream_socket` or `sock_file`
+- Process actions on `self` → `process` or `capability` class
+
+**Explicit Class Specification** (optional):
+```csv
+p, myapp_t, /var/run/app.sock, bind::unix_stream_socket, allow
+p, myapp_t, /var/lib/data, search::dir, allow
+```
 
 ## ✅ Supported Features (MVP)
 

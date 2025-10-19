@@ -20,17 +20,17 @@ func TestParserEdgeCases(t *testing.T) {
 		{
 			name:        "empty model file",
 			modelData:   "",
-			policyData:  "p, httpd_t, /var/www/*, read, file, allow",
+			policyData:  "p, httpd_t, /var/www/*, read, allow",
 			wantErr:     true,
 			errContains: "empty model file",
 		},
 		{
 			name: "empty policy file",
 			modelData: `[request_definition]
-r = sub, obj, act, cls
+r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act, cls, eft
+p = sub, obj, act, eft
 
 [policy_effect]
 e = some(where (p.eft == allow))
@@ -43,10 +43,10 @@ m = r.sub == p.sub`,
 		{
 			name: "malformed CSV line",
 			modelData: `[request_definition]
-r = sub, obj, act, cls
+r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act, cls, eft
+p = sub, obj, act, eft
 
 [policy_effect]
 e = some(where (p.eft == allow))
@@ -55,72 +55,72 @@ e = some(where (p.eft == allow))
 m = r.sub == p.sub`,
 			policyData:  "p, httpd_t, /var/www/*, read", // Missing fields
 			wantErr:     true,
-			errContains: "policy rule expects 6 fields",
+			errContains: "policy rule expects 5 fields",
 		},
 		{
 			name: "invalid effect",
 			modelData: `[request_definition]
-r = sub, obj, act, cls
+r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act, cls, eft
+p = sub, obj, act, eft
 
 [policy_effect]
 e = some(where (p.eft == allow))
 
 [matchers]
 m = r.sub == p.sub`,
-			policyData:  "p, httpd_t, /var/www/*, read, file, invalid_effect",
+			policyData:  "p, httpd_t, /var/www/*, read, invalid_effect",
 			wantErr:     true,
 			errContains: "invalid effect",
 		},
 		{
 			name: "boolean with invalid value",
 			modelData: `[request_definition]
-r = sub, obj, act, cls
+r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act, cls, eft
+p = sub, obj, act, eft
 
 [policy_effect]
 e = some(where (p.eft == allow))
 
 [matchers]
 m = r.sub == p.sub`,
-			policyData: `p, httpd_t, /var/www/*, read, file, allow
+			policyData: `p, httpd_t, /var/www/*, read, allow
 g2, bool:maybe, httpd_enable_network`,
 			wantErr: false, // Parser should handle this, decoder will validate
 		},
 		{
 			name: "very long path",
 			modelData: `[request_definition]
-r = sub, obj, act, cls
+r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act, cls, eft
+p = sub, obj, act, eft
 
 [policy_effect]
 e = some(where (p.eft == allow))
 
 [matchers]
 m = r.sub == p.sub`,
-			policyData: "p, httpd_t, " + generateLongPath(1000) + ", read, file, allow",
+			policyData: "p, httpd_t, " + generateLongPath(1000) + ", read, allow",
 			wantErr:    false, // Should handle long paths
 		},
 		{
 			name: "special characters in path",
 			modelData: `[request_definition]
-r = sub, obj, act, cls
+r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act, cls, eft
+p = sub, obj, act, eft
 
 [policy_effect]
 e = some(where (p.eft == allow))
 
 [matchers]
 m = r.sub == p.sub`,
-			policyData: `p, httpd_t, "/var/www/html with spaces/file-name.ext", read, file, allow`,
+			policyData: `p, httpd_t, "/var/www/html with spaces/file-name.ext", read, allow`,
 			wantErr:    false,
 		},
 	}
@@ -232,13 +232,16 @@ func createMockPML(policies, roles []string) *models.ParsedPML {
 	for _, p := range policies {
 		fields := parseCSVLine(p)
 		if len(fields) >= 6 {
+			// Parse policy: type, sub, obj, act, eft (standard Casbin triple)
+			if len(fields) != 5 {
+				continue // Skip invalid policies
+			}
 			policy := models.Policy{
 				Type:    fields[0],
 				Subject: fields[1],
 				Object:  fields[2],
 				Action:  fields[3],
-				Class:   fields[4],
-				Effect:  fields[5],
+				Effect:  fields[4],
 			}
 			policyList = append(policyList, policy)
 		}

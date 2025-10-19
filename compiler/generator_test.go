@@ -13,7 +13,6 @@ func TestGenerator_Generate(t *testing.T) {
 			Subject: "httpd",
 			Object:  "/var/www/html/*",
 			Action:  "read",
-			Class:   "file",
 			Effect:  "allow",
 		},
 		{
@@ -21,7 +20,6 @@ func TestGenerator_Generate(t *testing.T) {
 			Subject: "httpd",
 			Object:  "/var/log/httpd/*",
 			Action:  "write",
-			Class:   "file",
 			Effect:  "allow",
 		},
 	}
@@ -87,7 +85,6 @@ func TestGenerator_InferModuleName(t *testing.T) {
 					Subject: "nginx_process",
 					Object:  "/var/www/*",
 					Action:  "read",
-					Class:   "file",
 					Effect:  "allow",
 				},
 			},

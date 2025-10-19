@@ -19,10 +19,10 @@ func TestParseModel(t *testing.T) {
 		{
 			name: "valid basic model",
 			modelData: `[request_definition]
-r = sub, obj, act, class
+r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act, class, eft
+p = sub, obj, act, eft
 
 [role_definition]
 g = _, _
@@ -31,9 +31,9 @@ g = _, _
 e = some(where (p.eft == allow)) && !some(where (p.eft == deny))
 
 [matchers]
-m = r.sub == p.sub && r.obj == p.obj && r.act == p.act && r.class == p.class
+m = r.sub == p.sub && r.obj == p.obj && r.act == p.act
 `,
-			policyData: `p, httpd_t, /var/www/*, read, file, allow`,
+			policyData: `p, httpd_t, /var/www/*, read, allow`,
 			wantErr:    false,
 			checkFunc: func(t *testing.T, p *Parser) {
 				pml, err := p.Parse()
@@ -43,8 +43,8 @@ m = r.sub == p.sub && r.obj == p.obj && r.act == p.act && r.class == p.class
 				if pml.Model == nil {
 					t.Fatal("Model is nil")
 				}
-				if len(pml.Model.RequestDefinition["r"]) != 4 {
-					t.Errorf("Expected 4 request definition fields, got %d", len(pml.Model.RequestDefinition["r"]))
+				if len(pml.Model.RequestDefinition["r"]) != 3 {
+					t.Errorf("Expected 3 request definition fields, got %d", len(pml.Model.RequestDefinition["r"]))
 				}
 				if pml.Model.Matchers == "" {
 					t.Error("Matchers should not be empty")
@@ -59,12 +59,12 @@ m = r.sub == p.sub && r.obj == p.obj && r.act == p.act && r.class == p.class
 			modelData: `# This is a comment
 [request_definition]
 # Another comment
-r = sub, obj, act, class
+r = sub, obj, act
 
 # Empty lines should be ignored
 
 [policy_definition]
-p = sub, obj, act, class, eft
+p = sub, obj, act, eft
 
 [policy_effect]
 e = some(where (p.eft == allow))
@@ -73,7 +73,7 @@ e = some(where (p.eft == allow))
 m = r.sub == p.sub
 `,
 			policyData: `# Comment in policy
-p, httpd_t, /var/www/*, read, file, allow
+p, httpd_t, /var/www/*, read, allow
 `,
 			wantErr: false,
 			checkFunc: func(t *testing.T, p *Parser) {
@@ -100,7 +100,7 @@ m = r.sub == p.sub
 [policy_effect]
 e = some(where (p.eft == allow))
 `,
-			policyData: `p, httpd_t, /var/www/*, read, file, allow`,
+			policyData: `p, httpd_t, /var/www/*, read, allow`,
 			wantErr:    false, // Parser should succeed, analyzer will catch missing sections
 			checkFunc:  nil,
 		},
@@ -109,7 +109,7 @@ e = some(where (p.eft == allow))
 			modelData: `r = sub, obj, act
 [request_definition]
 `,
-			policyData:  `p, httpd_t, /var/www/*, read, file, allow`,
+			policyData:  `p, httpd_t, /var/www/*, read, allow`,
 			wantErr:     true,
 			errContains: "content found outside of section",
 		},
@@ -162,9 +162,9 @@ func TestParsePolicy(t *testing.T) {
 	}{
 		{
 			name: "valid policies with allow and deny",
-			policyData: `p, httpd_t, /var/www/*, read, file, allow
-p, httpd_t, /var/www/*, write, file, allow
-p, httpd_t, /usr/bin/*, write, file, deny
+			policyData: `p, httpd_t, /var/www/*, read, allow
+p, httpd_t, /var/www/*, write, allow
+p, httpd_t, /usr/bin/*, write, deny
 `,
 			wantPolicies: 3,
 			wantRoles:    0,
@@ -184,7 +184,7 @@ p, httpd_t, /usr/bin/*, write, file, deny
 		},
 		{
 			name: "policies with role relations",
-			policyData: `p, httpd_t, /var/www/*, read, file, allow
+			policyData: `p, httpd_t, /var/www/*, read, allow
 g, user_u, user_r
 g2, httpd_t, web_domain
 `,
@@ -200,7 +200,7 @@ g2, httpd_t, web_domain
 		},
 		{
 			name: "invalid policy - wrong field count",
-			policyData: `p, httpd_t, /var/www/*, read, file
+			policyData: `p, httpd_t, /var/www/*, read
 `,
 			wantErr:      true,
 			wantPolicies: 0,
@@ -214,10 +214,10 @@ g2, httpd_t, web_domain
 		{
 			name: "with comments and empty lines",
 			policyData: `# This is a comment
-p, httpd_t, /var/www/*, read, file, allow
+p, httpd_t, /var/www/*, read, allow
 
 # Another comment
-p, httpd_t, /var/log/*, write, file, allow
+p, httpd_t, /var/log/*, write, allow
 `,
 			wantPolicies: 2,
 			wantErr:      false,
@@ -226,10 +226,10 @@ p, httpd_t, /var/log/*, write, file, allow
 
 	// Create a valid model for all tests
 	modelData := `[request_definition]
-r = sub, obj, act, class
+r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act, class, eft
+p = sub, obj, act, eft
 
 [role_definition]
 g = _, _
@@ -287,23 +287,23 @@ func TestParseCSVLine(t *testing.T) {
 	}{
 		{
 			name:     "simple CSV",
-			line:     "p, httpd_t, /var/www/*, read, file, allow",
-			expected: []string{"p", "httpd_t", "/var/www/*", "read", "file", "allow"},
+			line:     "p, httpd_t, /var/www/*, read, allow",
+			expected: []string{"p", "httpd_t", "/var/www/*", "read", "allow"},
 		},
 		{
 			name:     "CSV with quotes",
-			line:     `p, "httpd_t", "/var/www/*", read, file, allow`,
-			expected: []string{"p", "httpd_t", "/var/www/*", "read", "file", "allow"},
+			line:     `p, "httpd_t", "/var/www/*", read, allow`,
+			expected: []string{"p", "httpd_t", "/var/www/*", "read", "allow"},
 		},
 		{
 			name:     "CSV with commas in quotes",
-			line:     `p, httpd_t, "/var/www,html/*", read, file, allow`,
-			expected: []string{"p", "httpd_t", "/var/www,html/*", "read", "file", "allow"},
+			line:     `p, httpd_t, "/var/www,html/*", read, allow`,
+			expected: []string{"p", "httpd_t", "/var/www,html/*", "read", "allow"},
 		},
 		{
 			name:     "CSV with spaces",
-			line:     "p,  httpd_t  ,  /var/www/*  ,  read  ,  file  ,  allow  ",
-			expected: []string{"p", "httpd_t", "/var/www/*", "read", "file", "allow"},
+			line:     "p,  httpd_t  ,  /var/www/*  ,  read  ,  allow  ",
+			expected: []string{"p", "httpd_t", "/var/www/*", "read", "allow"},
 		},
 	}
 

@@ -95,14 +95,26 @@ func (p *Parser) Decode(pml *models.ParsedPML) (*models.DecodedPML, error) {
 }
 
 // decodePolicy decodes a standard policy into DecodedPolicy
+// Extracts class information from object field or infers it
 func (p *Parser) decodePolicy(policy *models.Policy) (*models.DecodedPolicy, error) {
 	decoded := &models.DecodedPolicy{
 		Policy: *policy,
 	}
 
+	// Extract class from object if explicitly specified (format: "path::class")
+	objPath := policy.Object
+	if strings.Contains(objPath, "::") {
+		parts := strings.SplitN(objPath, "::", 2)
+		decoded.Object = parts[0]
+		decoded.Class = parts[1]
+	} else {
+		// Auto-infer class from object and action
+		decoded.Class = inferClass(objPath, policy.Action)
+	}
+
 	// Check if object contains a condition (?cond=)
-	if strings.Contains(policy.Object, "?cond=") {
-		parts := strings.SplitN(policy.Object, "?cond=", 2)
+	if strings.Contains(decoded.Object, "?cond=") {
+		parts := strings.SplitN(decoded.Object, "?cond=", 2)
 		decoded.Object = parts[0]
 		decoded.Condition = parts[1]
 	}
@@ -112,13 +124,98 @@ func (p *Parser) decodePolicy(policy *models.Policy) (*models.DecodedPolicy, err
 		decoded.IsTransition = true
 		decoded.TransitionInfo = &models.TransitionInfo{
 			SourceType: policy.Subject,
-			TargetType: policy.Object,
-			Class:      policy.Class,
+			TargetType: decoded.Object,
+			Class:      decoded.Class,
 			NewType:    policy.Effect,
 		}
 	}
 
 	return decoded, nil
+}
+
+// inferClass infers the SELinux object class from the object path and action
+// This implements intelligent defaults for common patterns
+func inferClass(object string, action string) string {
+	// Special objects
+	if object == "self" {
+		// Actions on self typically relate to process or capability
+		if isCapabilityAction(action) {
+			return "capability"
+		}
+		return "process"
+	}
+
+	// Network resources (tcp:port, udp:port format)
+	if strings.HasPrefix(object, "tcp:") {
+		return "tcp_socket"
+	}
+	if strings.HasPrefix(object, "udp:") {
+		return "udp_socket"
+	}
+
+	// Unix socket files (.sock suffix)
+	if strings.HasSuffix(object, ".sock") || strings.Contains(object, ".sock") {
+		// Check action to determine socket type vs sock_file
+		if isSocketAction(action) {
+			return "unix_stream_socket"
+		}
+		return "sock_file"
+	}
+
+	// Directory-specific actions
+	if isDirectoryAction(action) {
+		return "dir"
+	}
+
+	// Default to file for file system paths
+	if strings.HasPrefix(object, "/") {
+		return "file"
+	}
+
+	// Fallback
+	return "file"
+}
+
+// isCapabilityAction checks if action is a capability-related action
+func isCapabilityAction(action string) bool {
+	capabilityActions := []string{
+		"net_bind_service", "setuid", "setgid", "chown", "dac_override",
+		"dac_read_search", "fowner", "fsetid", "kill", "sys_admin",
+		"sys_chroot", "sys_ptrace", "sys_resource",
+	}
+	for _, ca := range capabilityActions {
+		if action == ca {
+			return true
+		}
+	}
+	return false
+}
+
+// isSocketAction checks if action is socket-specific (vs file operations on .sock file)
+func isSocketAction(action string) bool {
+	socketActions := []string{
+		"bind", "connect", "listen", "accept", "connectto",
+		"sendto", "recvfrom", "send_msg", "recv_msg",
+	}
+	for _, sa := range socketActions {
+		if action == sa {
+			return true
+		}
+	}
+	return false
+}
+
+// isDirectoryAction checks if action is directory-specific
+func isDirectoryAction(action string) bool {
+	dirActions := []string{
+		"search", "add_name", "remove_name", "reparent", "rmdir",
+	}
+	for _, da := range dirActions {
+		if action == da {
+			return true
+		}
+	}
+	return false
 }
 
 // parseModel parses the PML model configuration file (.conf)
@@ -263,16 +360,16 @@ func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, error) {
 
 		switch ruleType {
 		case "p", "p2", "p3":
-			// Standard policy rule: p, subject, object, action, class, effect
-			if len(fields) != 6 {
+			// Standard Casbin triple policy rule: p, subject, object, action, effect
+			if len(fields) != 5 {
 				return nil, nil, &ParseError{
 					File:    p.policyPath,
 					Line:    lineNum,
-					Message: fmt.Sprintf("policy rule expects 6 fields, got %d: %s", len(fields), line),
+					Message: fmt.Sprintf("policy rule expects 5 fields (type, sub, obj, act, eft), got %d: %s", len(fields), line),
 				}
 			}
 			// Validate effect field
-			effect := strings.TrimSpace(fields[5])
+			effect := strings.TrimSpace(fields[4])
 			if effect != "allow" && effect != "deny" {
 				return nil, nil, &ParseError{
 					File:    p.policyPath,
@@ -286,7 +383,6 @@ func (p *Parser) parsePolicy() ([]models.Policy, []models.RoleRelation, error) {
 				Subject: strings.TrimSpace(fields[1]),
 				Object:  strings.TrimSpace(fields[2]),
 				Action:  strings.TrimSpace(fields[3]),
-				Class:   strings.TrimSpace(fields[4]),
 				Effect:  effect,
 			})
 
