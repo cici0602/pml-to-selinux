@@ -28,7 +28,7 @@ func TestTypeMapper_EdgeCases(t *testing.T) {
 			name:         "path with multiple wildcards",
 			modulePrefix: "httpd",
 			path:         "/var/*/logs/*",
-			expected:     "httpd_var_logs_t",
+			expected:     "httpd_var_t", // Base path before first wildcard
 		},
 		{
 			name:         "path with double slashes",

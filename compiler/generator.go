@@ -14,7 +14,6 @@ type Generator struct {
 	moduleName   string
 	typeMapper   *mapping.TypeMapper
 	pathMapper   *mapping.PathMapper
-	roleMapper   *mapping.RoleMapper
 	actionMapper *mapping.ActionMapper
 }
 
@@ -25,7 +24,6 @@ func NewGenerator(decoded *models.DecodedPML, moduleName string) *Generator {
 		moduleName:   moduleName,
 		typeMapper:   mapping.NewTypeMapper(moduleName),
 		pathMapper:   mapping.NewPathMapper(),
-		roleMapper:   mapping.NewRoleMapper(moduleName),
 		actionMapper: mapping.NewActionMapper(),
 	}
 }
