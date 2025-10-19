@@ -39,55 +39,11 @@ func (g *SemanageGenerator) GenerateCommands() *SemanageCommands {
 		ModuleCommands:      make([]string, 0),
 	}
 
-	// Generate boolean commands
-	commands.BooleanCommands = g.generateBooleanCommands()
-
 	// Generate file context commands
 	commands.FileContextCommands = g.generateFileContextCommands()
 
 	// Generate module installation commands
 	commands.ModuleCommands = g.generateModuleCommands()
-
-	return commands
-}
-
-// generateBooleanCommands generates semanage boolean commands
-func (g *SemanageGenerator) generateBooleanCommands() []string {
-	commands := make([]string, 0)
-
-	if len(g.policy.Booleans) == 0 {
-		return commands
-	}
-
-	// Sort booleans for consistent output
-	bools := make([]models.BooleanDeclaration, len(g.policy.Booleans))
-	copy(bools, g.policy.Booleans)
-	sort.Slice(bools, func(i, j int) bool {
-		return bools[i].Name < bools[j].Name
-	})
-
-	for _, boolean := range bools {
-		value := "off"
-		if boolean.DefaultValue {
-			value = "on"
-		}
-
-		// Command to set boolean value persistently
-		cmd := fmt.Sprintf("semanage boolean -m --on %s", boolean.Name)
-		if !boolean.DefaultValue {
-			cmd = fmt.Sprintf("semanage boolean -m --off %s", boolean.Name)
-		}
-
-		// Add comment with description
-		if boolean.Description != "" {
-			commands = append(commands, fmt.Sprintf("# %s", boolean.Description))
-		}
-		commands = append(commands, cmd)
-
-		// Also add setsebool command for immediate effect
-		commands = append(commands, fmt.Sprintf("setsebool -P %s %s", boolean.Name, value))
-		commands = append(commands, "")
-	}
 
 	return commands
 }
@@ -130,11 +86,11 @@ func (g *SemanageGenerator) generateFileContextCommands() []string {
 		}
 
 		// Add file context
+		// Use SELinuxType instead of Context
 		cmd := fmt.Sprintf("semanage fcontext -a -t %s %s '%s'",
-			fc.Context, fileTypeFlag, fc.PathPattern)
+			fc.SELinuxType, fileTypeFlag, fc.PathPattern)
 		commands = append(commands, cmd)
 	}
-
 	// Add restorecon command to apply changes
 	if len(commands) > 0 {
 		commands = append(commands, "")

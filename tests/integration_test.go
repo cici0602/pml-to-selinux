@@ -89,7 +89,6 @@ func TestComplexPolicyWithBooleans(t *testing.T) {
 			{TypeName: "webapp_db_t"},
 			{TypeName: "webapp_cache_t"},
 		},
-		Booleans: []models.BooleanDeclaration{
 			{
 				Name:         "webapp_can_network",
 				DefaultValue: false,
@@ -101,7 +100,6 @@ func TestComplexPolicyWithBooleans(t *testing.T) {
 				Description:  "Allow webapp to use NFS",
 			},
 		},
-		ConditionalBlocks: []models.ConditionalBlock{
 			{
 				BooleanExpr: "webapp_can_network",
 				ThenRules: []models.AllowRule{

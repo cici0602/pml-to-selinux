@@ -1,0 +1,25 @@
+# Simple Web Application Policy
+# Scenario: A web app that binds to port 8080, reads config, writes logs, and manages data files
+
+# Subject domain
+p, myweb_t, /opt/myweb/bin/myweb, execute, file, allow
+
+# Read configuration files
+p, myweb_t, /opt/myweb/config(/.*  )?, read, file, allow
+
+# Write and create data files
+p, myweb_t, /var/lib/myweb(/.*)?, read, file, allow
+p, myweb_t, /var/lib/myweb(/.*)?, write, file, allow
+p, myweb_t, /var/lib/myweb(/.*)?, create, file, allow
+p, myweb_t, /var/lib/myweb(/.*)?, search, dir, allow
+p, myweb_t, /var/lib/myweb(/.*)?, add_name, dir, allow
+
+# Append to log files
+p, myweb_t, /var/log/myweb(/.*)?, append, file, allow
+p, myweb_t, /var/log/myweb(/.*)?, write, file, allow
+
+# Bind to TCP port 8080
+p, myweb_t, tcp:8080, name_bind, tcp_socket, allow
+
+# Capability to bind to ports
+p, myweb_t, self, net_bind_service, capability, allow

@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cici0602/pml-to-selinux/mapping"
 	"github.com/cici0602/pml-to-selinux/models"
 )
 
@@ -90,19 +89,17 @@ func (g *FCGenerator) writeFileContexts(builder *strings.Builder) error {
 
 // writeFileContext writes a single file context specification
 func (g *FCGenerator) writeFileContext(builder *strings.Builder, fc models.FileContext) error {
-	// Get file type specifier
-	fileTypeSpec := mapping.GetFileTypeSpecifier(fc.FileType)
-
-	// Build the context string if not already set
-	context := fc.Context
-	if context == "" {
-		context = fmt.Sprintf("%s:%s:%s:%s",
-			fc.User, fc.Role, fc.FileType, fc.Level)
+	// Get file type specifier (e.g., "--" for file, "-d" for directory)
+	fileTypeSpec := fc.FileType
+	if fileTypeSpec == "" {
+		fileTypeSpec = "--" // default to regular file
 	}
 
-	// Use gen_context for proper format
+	// Build the full SELinux context: system_u:object_r:type_t:s0
+	context := fmt.Sprintf("system_u:object_r:%s:s0", fc.SELinuxType)
+
 	// Format: /path/pattern file_type_spec gen_context(system_u:object_r:type_t:s0)
-	builder.WriteString(fmt.Sprintf("%s%s\tgen_context(%s)\n",
+	builder.WriteString(fmt.Sprintf("%s\t%s\tgen_context(%s)\n",
 		fc.PathPattern,
 		fileTypeSpec,
 		context))

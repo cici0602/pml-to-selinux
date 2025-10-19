@@ -310,7 +310,6 @@ func (a *Analyzer) generateStats() {
 	stats.TotalPolicies = len(a.decoded.Policies)
 	stats.RoleRelations = len(a.decoded.Roles) + len(a.decoded.TypeAttributes)
 	stats.Transitions = len(a.decoded.Transitions)
-	stats.Booleans = len(a.decoded.Booleans)
 
 	uniqueSubjects := make(map[string]bool)
 	uniqueObjects := make(map[string]bool)

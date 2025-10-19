@@ -372,7 +372,6 @@ func (o *Optimizer) AnalyzeComplexity() ComplexityAnalysis {
 	return ComplexityAnalysis{
 		TotalRules:          len(o.policy.Rules),
 		TotalTypes:          len(o.policy.Types),
-		TotalBooleans:       len(o.policy.Booleans),
 		AverageRulesPerType: avgRules,
 		MaxRulesPerType:     maxRules,
 		ComplexityScore:     len(o.policy.Rules) + len(o.policy.Types)*2,

@@ -3,20 +3,15 @@ package mapping
 import (
 	"fmt"
 	"strings"
-
-	"github.com/cici0602/pml-to-selinux/models"
 )
 
 // FilesystemMapper handles mapping of filesystem contexts
 type FilesystemMapper struct {
-	levelMapper *LevelMapper
 }
 
 // NewFilesystemMapper creates a new FilesystemMapper
-func NewFilesystemMapper(levelMapper *LevelMapper) *FilesystemMapper {
-	return &FilesystemMapper{
-		levelMapper: levelMapper,
-	}
+func NewFilesystemMapper() *FilesystemMapper {
+	return &FilesystemMapper{}
 }
 
 // GenfsconRule represents a genfscon rule for generic filesystem contexts
@@ -228,8 +223,11 @@ func (fm *FilesystemMapper) InferFSType(path string) string {
 }
 
 // GenerateFilesystemContext generates a complete filesystem context
-func (fm *FilesystemMapper) GenerateFilesystemContext(fsType, path, typeName string, level models.SecurityRange) string {
-	return fmt.Sprintf("system_u:object_r:%s:%s", typeName, level.String())
+func (fm *FilesystemMapper) GenerateFilesystemContext(fsType, path, typeName string, level string) string {
+	if level == "" {
+		level = "s0"
+	}
+	return fmt.Sprintf("system_u:object_r:%s:%s", typeName, level)
 }
 
 // GetFilesystemSecurity returns security properties for a filesystem type

@@ -1,0 +1,28 @@
+# Database Service Policy
+# Scenario: Database binds to port 5432, manages data files and logs
+
+# Execute the database binary
+p, mydb_t, /usr/lib/mydb/bin/mydb, execute, file, allow
+
+# Read/write database files
+p, mydb_t, /var/lib/mydb(/.*)?, read, file, allow
+p, mydb_t, /var/lib/mydb(/.*)?, write, file, allow
+p, mydb_t, /var/lib/mydb(/.*)?, create, file, allow
+p, mydb_t, /var/lib/mydb(/.*)?, unlink, file, allow
+p, mydb_t, /var/lib/mydb(/.*)?, search, dir, allow
+p, mydb_t, /var/lib/mydb(/.*)?, add_name, dir, allow
+p, mydb_t, /var/lib/mydb(/.*)?, remove_name, dir, allow
+
+# Append to log files
+p, mydb_t, /var/log/mydb(/.*)?, append, file, allow
+p, mydb_t, /var/log/mydb(/.*)?, write, file, allow
+
+# Bind to TCP port 5432 (PostgreSQL-like)
+p, mydb_t, tcp:5432, name_bind, tcp_socket, allow
+
+# Capability to bind to ports
+p, mydb_t, self, net_bind_service, capability, allow
+
+# Unix socket for local connections
+p, mydb_t, /var/run/mydb.sock, bind, unix_stream_socket, allow
+p, mydb_t, /var/run/mydb.sock, create, sock_file, allow

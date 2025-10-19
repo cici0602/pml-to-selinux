@@ -1,116 +1,91 @@
 package models
 
 // SELinuxPolicy represents a complete SELinux policy module
+// Simplified for 80% use cases: basic domain, file/dir access, ports, sockets
 type SELinuxPolicy struct {
-	ModuleName        string
-	Version           string
-	Types             []TypeDeclaration
-	Rules             []AllowRule
-	DenyRules         []DenyRule
-	Transitions       []TypeTransition
-	FileContexts      []FileContext
-	Booleans          []BooleanDeclaration
-	ConditionalBlocks []ConditionalBlock // Conditional policy blocks
-	Interfaces        []InterfaceDefinition
-	Macros            []MacroDefinition
-	Constraints       []Constraint // SELinux constraints
+	ModuleName   string
+	Version      string
+	Types        []TypeDeclaration
+	Rules        []AllowRule
+	Transitions  []TypeTransition
+	FileContexts []FileContext
+	Interfaces   []InterfaceDefinition
+	Capabilities []CapabilityRule
+	PortBindings []PortBinding
 }
 
 // TypeDeclaration represents a SELinux type declaration
 type TypeDeclaration struct {
 	TypeName   string
-	Attributes []string // Type attributes if any
+	Attributes []string // Basic attributes: domain, file_type, exec_type, etc.
+	Comment    string   // Human-readable description
 }
 
 // AllowRule represents an allow rule in SELinux
 type AllowRule struct {
 	SourceType     string
 	TargetType     string
-	Class          string
-	Permissions    []string
-	OriginalObject string // Original object pattern from PML (for tracking)
-}
-
-// DenyRule represents a deny/neverallow rule in SELinux
-type DenyRule struct {
-	SourceType     string
-	TargetType     string
-	Class          string
-	Permissions    []string
-	OriginalObject string // Original object pattern from PML
+	Class          string   // file, dir, tcp_socket, unix_stream_socket, etc.
+	Permissions    []string // read, write, execute, name_bind, etc.
+	OriginalObject string   // Original object pattern from PML (for tracking)
+	Comment        string   // Human-readable comment
 }
 
 // TypeTransition represents a type_transition rule
+// Used for automatic labeling when creating files/dirs
 type TypeTransition struct {
 	SourceType string
 	TargetType string
 	Class      string
 	NewType    string
+	Comment    string
 }
 
 // FileContext represents a file context mapping
 type FileContext struct {
 	PathPattern string // e.g., "/var/www/html(/.*)?"
-	FileType    string // e.g., "httpd_var_www_t"
-	Context     string // Full context: "system_u:object_r:httpd_var_www_t:s0"
-	User        string // SELinux user (default: "system_u")
-	Role        string // SELinux role (default: "object_r")
-	Level       string // MLS/MCS level (default: "s0")
+	FileType    string // -- for regular file, -d for directory, etc.
+	SELinuxType string // e.g., "httpd_var_www_t"
+	Comment     string // Human-readable comment
 }
 
 // InterfaceDefinition represents a SELinux interface
+// Simplified to provide basic access interfaces for other modules
 type InterfaceDefinition struct {
 	Name        string
 	Description string
-	Parameters  []string
 	Body        string
 }
 
-// BooleanDeclaration represents a SELinux boolean declaration
-type BooleanDeclaration struct {
-	Name         string
-	DefaultValue bool
-	Description  string
+// CapabilityRule represents a capability grant
+// For things like net_bind_service, setuid, etc.
+type CapabilityRule struct {
+	SourceType string
+	Capability string // net_bind_service, setuid, setgid, etc.
+	Comment    string
 }
 
-// ConditionalBlock represents a conditional policy block (if-else)
-// Format in SELinux: if (boolean_expr) { rules } else { rules }
-type ConditionalBlock struct {
-	BooleanExpr string      // Boolean expression: "httpd_enable_homedirs" or "!httpd_enable_homedirs"
-	ThenRules   []AllowRule // Rules when condition is true
-	ElseRules   []AllowRule // Rules when condition is false (optional)
-}
-
-// ConditionalRule represents a rule that depends on a boolean
-type ConditionalRule struct {
-	BooleanName string
-	Condition   bool // true for "if", false for "if not"
-	Rule        AllowRule
-}
-
-// MacroDefinition represents a SELinux macro (m4 macro)
-type MacroDefinition struct {
-	Name        string
-	Description string
-	Parameters  []string
-	Body        string
+// PortBinding represents a port binding suggestion
+// Used to generate semanage port commands or port_t declarations
+type PortBinding struct {
+	Port     int
+	Protocol string // tcp, udp
+	PortType string // e.g., "http_port_t", "myapp_port_t"
+	Comment  string
 }
 
 // NewSELinuxPolicy creates a new SELinuxPolicy with default values
 func NewSELinuxPolicy(moduleName, version string) *SELinuxPolicy {
 	return &SELinuxPolicy{
-		ModuleName:        moduleName,
-		Version:           version,
-		Types:             make([]TypeDeclaration, 0),
-		Rules:             make([]AllowRule, 0),
-		DenyRules:         make([]DenyRule, 0),
-		Transitions:       make([]TypeTransition, 0),
-		FileContexts:      make([]FileContext, 0),
-		Booleans:          make([]BooleanDeclaration, 0),
-		ConditionalBlocks: make([]ConditionalBlock, 0),
-		Interfaces:        make([]InterfaceDefinition, 0),
-		Macros:            make([]MacroDefinition, 0),
-		Constraints:       make([]Constraint, 0),
+		ModuleName:   moduleName,
+		Version:      version,
+		Types:        make([]TypeDeclaration, 0),
+		Rules:        make([]AllowRule, 0),
+		Transitions:  make([]TypeTransition, 0),
+		FileContexts: make([]FileContext, 0),
+		Interfaces:   make([]InterfaceDefinition, 0),
+		Capabilities: make([]CapabilityRule, 0),
+		PortBindings: make([]PortBinding, 0),
 	}
 }
 
@@ -122,33 +97,33 @@ func (p *SELinuxPolicy) AddType(typeName string, attributes ...string) {
 	})
 }
 
+// AddTypeWithComment adds a type declaration with a comment
+func (p *SELinuxPolicy) AddTypeWithComment(typeName, comment string, attributes ...string) {
+	p.Types = append(p.Types, TypeDeclaration{
+		TypeName:   typeName,
+		Attributes: attributes,
+		Comment:    comment,
+	})
+}
+
 // AddAllowRule adds an allow rule to the policy
 func (p *SELinuxPolicy) AddAllowRule(rule AllowRule) {
 	p.Rules = append(p.Rules, rule)
 }
 
-// AddDenyRule adds a deny rule to the policy
-func (p *SELinuxPolicy) AddDenyRule(rule DenyRule) {
-	p.DenyRules = append(p.DenyRules, rule)
+// AddFileContext adds a file context to the policy
+func (p *SELinuxPolicy) AddFileContext(fc FileContext) {
+	p.FileContexts = append(p.FileContexts, fc)
 }
 
-// AddFileContext adds a file context to the policy with defaults
-func (p *SELinuxPolicy) AddFileContext(fc FileContext) {
-	// Set defaults if not provided
-	if fc.User == "" {
-		fc.User = "system_u"
-	}
-	if fc.Role == "" {
-		fc.Role = "object_r"
-	}
-	if fc.Level == "" {
-		fc.Level = "s0"
-	}
-	// Build full context string
-	if fc.Context == "" {
-		fc.Context = fc.User + ":" + fc.Role + ":" + fc.FileType + ":" + fc.Level
-	}
-	p.FileContexts = append(p.FileContexts, fc)
+// AddCapability adds a capability rule to the policy
+func (p *SELinuxPolicy) AddCapability(cap CapabilityRule) {
+	p.Capabilities = append(p.Capabilities, cap)
+}
+
+// AddPortBinding adds a port binding suggestion to the policy
+func (p *SELinuxPolicy) AddPortBinding(port PortBinding) {
+	p.PortBindings = append(p.PortBindings, port)
 }
 
 // GetTypeByName returns a type declaration by name
@@ -166,21 +141,12 @@ func (p *SELinuxPolicy) HasType(typeName string) bool {
 	return p.GetTypeByName(typeName) != nil
 }
 
-// AddBoolean adds a boolean declaration to the policy
-func (p *SELinuxPolicy) AddBoolean(name string, defaultValue bool, description string) {
-	p.Booleans = append(p.Booleans, BooleanDeclaration{
-		Name:         name,
-		DefaultValue: defaultValue,
-		Description:  description,
-	})
-}
-
 // AddInterface adds an interface definition to the policy
 func (p *SELinuxPolicy) AddInterface(iface InterfaceDefinition) {
 	p.Interfaces = append(p.Interfaces, iface)
 }
 
-// AddMacro adds a macro definition to the policy
-func (p *SELinuxPolicy) AddMacro(macro MacroDefinition) {
-	p.Macros = append(p.Macros, macro)
+// AddTransition adds a type transition to the policy
+func (p *SELinuxPolicy) AddTransition(trans TypeTransition) {
+	p.Transitions = append(p.Transitions, trans)
 }

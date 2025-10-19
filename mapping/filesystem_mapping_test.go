@@ -8,8 +8,7 @@ import (
 )
 
 func TestFilesystemMapper_GenerateGenfsconRules(t *testing.T) {
-	lm := NewLevelMapper()
-	fm := NewFilesystemMapper(lm)
+	fm := NewFilesystemMapper()
 
 	rules := fm.GenerateGenfsconRules()
 
@@ -45,8 +44,7 @@ func TestFilesystemMapper_GenerateGenfsconRules(t *testing.T) {
 }
 
 func TestFilesystemMapper_GenerateFsuseRules(t *testing.T) {
-	lm := NewLevelMapper()
-	fm := NewFilesystemMapper(lm)
+	fm := NewFilesystemMapper()
 
 	rules := fm.GenerateFsuseRules()
 
@@ -82,8 +80,7 @@ func TestFilesystemMapper_GenerateFsuseRules(t *testing.T) {
 }
 
 func TestFilesystemMapper_InferFSType(t *testing.T) {
-	lm := NewLevelMapper()
-	fm := NewFilesystemMapper(lm)
+	fm := NewFilesystemMapper()
 
 	tests := []struct {
 		name     string
@@ -133,8 +130,7 @@ func TestFilesystemMapper_InferFSType(t *testing.T) {
 }
 
 func TestFilesystemMapper_GetFilesystemSecurity(t *testing.T) {
-	lm := NewLevelMapper()
-	fm := NewFilesystemMapper(lm)
+	fm := NewFilesystemMapper()
 
 	tests := []struct {
 		name               string
@@ -190,8 +186,7 @@ func TestFilesystemMapper_GetFilesystemSecurity(t *testing.T) {
 }
 
 func TestFilesystemMapper_ValidateFilesystemPolicy(t *testing.T) {
-	lm := NewLevelMapper()
-	fm := NewFilesystemMapper(lm)
+	fm := NewFilesystemMapper()
 
 	tests := []struct {
 		name          string
@@ -247,8 +242,7 @@ func TestFilesystemMapper_ValidateFilesystemPolicy(t *testing.T) {
 }
 
 func TestFilesystemMapper_GeneratePortconRules(t *testing.T) {
-	lm := NewLevelMapper()
-	fm := NewFilesystemMapper(lm)
+	fm := NewFilesystemMapper()
 
 	rules := fm.GeneratePortconRules()
 
@@ -293,8 +287,7 @@ func TestFilesystemMapper_GeneratePortconRules(t *testing.T) {
 }
 
 func TestFilesystemMapper_GenerateFilesystemContext(t *testing.T) {
-	lm := NewLevelMapper()
-	fm := NewFilesystemMapper(lm)
+	fm := NewFilesystemMapper()
 
 	level := models.DefaultSecurityRange()
 	context := fm.GenerateFilesystemContext("ext4", "/var/www", "httpd_sys_content_t", level)

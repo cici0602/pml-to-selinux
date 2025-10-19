@@ -30,11 +30,6 @@ func (g *TEGenerator) Generate() (string, error) {
 	// Write policy module declaration
 	g.writePolicyModule(&builder)
 
-	// Write boolean declarations
-	if err := g.writeBooleanDeclarations(&builder); err != nil {
-		return "", err
-	}
-
 	// Write type declarations
 	if err := g.writeTypeDeclarations(&builder); err != nil {
 		return "", err
@@ -55,11 +50,6 @@ func (g *TEGenerator) Generate() (string, error) {
 		return "", err
 	}
 
-	// Write conditional blocks if any
-	if err := g.writeConditionalBlocks(&builder); err != nil {
-		return "", err
-	}
-
 	return builder.String(), nil
 }
 
@@ -77,45 +67,6 @@ func (g *TEGenerator) writePolicyModule(builder *strings.Builder) {
 	builder.WriteString(fmt.Sprintf("policy_module(%s, %s)\n\n",
 		g.policy.ModuleName,
 		g.policy.Version))
-}
-
-// writeBooleanDeclarations writes all boolean declarations
-func (g *TEGenerator) writeBooleanDeclarations(builder *strings.Builder) error {
-	if len(g.policy.Booleans) == 0 {
-		return nil
-	}
-
-	builder.WriteString("########################################\n")
-	builder.WriteString("# Boolean Declarations\n")
-	builder.WriteString("########################################\n\n")
-
-	// Sort booleans for consistent output
-	bools := make([]models.BooleanDeclaration, len(g.policy.Booleans))
-	copy(bools, g.policy.Booleans)
-	sort.Slice(bools, func(i, j int) bool {
-		return bools[i].Name < bools[j].Name
-	})
-
-	for _, boolean := range bools {
-		// Write description as comment if provided
-		if boolean.Description != "" {
-			builder.WriteString("## <desc>\n")
-			builder.WriteString("## <p>\n")
-			builder.WriteString(fmt.Sprintf("## %s\n", boolean.Description))
-			builder.WriteString("## </p>\n")
-			builder.WriteString("## </desc>\n")
-		}
-
-		// Write boolean declaration
-		defaultStr := "false"
-		if boolean.DefaultValue {
-			defaultStr = "true"
-		}
-		builder.WriteString(fmt.Sprintf("gen_tunable(%s, %s)\n\n", boolean.Name, defaultStr))
-	}
-
-	builder.WriteString("\n")
-	return nil
 }
 
 // writeTypeDeclarations writes all type declarations
@@ -231,45 +182,10 @@ func (g *TEGenerator) groupRules(rules []models.AllowRule) map[string]map[string
 	return groups
 }
 
-// writeDenyRules writes all deny rules (as neverallow)
+// writeDenyRules - Deny rules not supported in simplified version
 func (g *TEGenerator) writeDenyRules(builder *strings.Builder) error {
-	if len(g.policy.DenyRules) == 0 {
-		return nil
-	}
-
-	builder.WriteString("########################################\n")
-	builder.WriteString("# Deny Rules (neverallow)\n")
-	builder.WriteString("########################################\n\n")
-
-	// Sort deny rules for consistent output
-	denyRules := make([]models.DenyRule, len(g.policy.DenyRules))
-	copy(denyRules, g.policy.DenyRules)
-	sort.Slice(denyRules, func(i, j int) bool {
-		if denyRules[i].SourceType != denyRules[j].SourceType {
-			return denyRules[i].SourceType < denyRules[j].SourceType
-		}
-		if denyRules[i].TargetType != denyRules[j].TargetType {
-			return denyRules[i].TargetType < denyRules[j].TargetType
-		}
-		return denyRules[i].Class < denyRules[j].Class
-	})
-
-	for _, rule := range denyRules {
-		// Sort permissions
-		perms := make([]string, len(rule.Permissions))
-		copy(perms, rule.Permissions)
-		sort.Strings(perms)
-
-		if len(perms) == 1 {
-			builder.WriteString(fmt.Sprintf("neverallow %s %s:%s %s;\n",
-				rule.SourceType, rule.TargetType, rule.Class, perms[0]))
-		} else {
-			builder.WriteString(fmt.Sprintf("neverallow %s %s:%s { %s };\n",
-				rule.SourceType, rule.TargetType, rule.Class, strings.Join(perms, " ")))
-		}
-	}
-
-	builder.WriteString("\n")
+	// Deny rules removed in simplified version
+	// For production use, consider using audit_deny or neverallow manually
 	return nil
 }
 
@@ -341,67 +257,6 @@ func (g *TEGenerator) writeDomainTransitionRules(builder *strings.Builder, trans
 		target, entrypoint))
 
 	builder.WriteString("\n")
-}
-
-// writeConditionalBlocks writes conditional policy blocks (if-else)
-func (g *TEGenerator) writeConditionalBlocks(builder *strings.Builder) error {
-	if len(g.policy.ConditionalBlocks) == 0 {
-		return nil
-	}
-
-	builder.WriteString("########################################\n")
-	builder.WriteString("# Conditional Policy Blocks\n")
-	builder.WriteString("########################################\n\n")
-
-	// Sort conditional blocks for consistent output
-	blocks := make([]models.ConditionalBlock, len(g.policy.ConditionalBlocks))
-	copy(blocks, g.policy.ConditionalBlocks)
-	sort.Slice(blocks, func(i, j int) bool {
-		return blocks[i].BooleanExpr < blocks[j].BooleanExpr
-	})
-
-	for _, block := range blocks {
-		// Write if statement
-		builder.WriteString(fmt.Sprintf("if (%s) {\n", block.BooleanExpr))
-
-		// Write then rules
-		for _, rule := range block.ThenRules {
-			perms := make([]string, len(rule.Permissions))
-			copy(perms, rule.Permissions)
-			sort.Strings(perms)
-
-			if len(perms) == 1 {
-				builder.WriteString(fmt.Sprintf("\tallow %s %s:%s %s;\n",
-					rule.SourceType, rule.TargetType, rule.Class, perms[0]))
-			} else {
-				builder.WriteString(fmt.Sprintf("\tallow %s %s:%s { %s };\n",
-					rule.SourceType, rule.TargetType, rule.Class, strings.Join(perms, " ")))
-			}
-		}
-
-		// Write else block if present
-		if len(block.ElseRules) > 0 {
-			builder.WriteString("} else {\n")
-
-			for _, rule := range block.ElseRules {
-				perms := make([]string, len(rule.Permissions))
-				copy(perms, rule.Permissions)
-				sort.Strings(perms)
-
-				if len(perms) == 1 {
-					builder.WriteString(fmt.Sprintf("\tallow %s %s:%s %s;\n",
-						rule.SourceType, rule.TargetType, rule.Class, perms[0]))
-				} else {
-					builder.WriteString(fmt.Sprintf("\tallow %s %s:%s { %s };\n",
-						rule.SourceType, rule.TargetType, rule.Class, strings.Join(perms, " ")))
-				}
-			}
-		}
-
-		builder.WriteString("}\n\n")
-	}
-
-	return nil
 }
 
 // uniqueStrings removes duplicates from a string slice

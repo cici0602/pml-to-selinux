@@ -58,13 +58,11 @@ func (p *Parser) Parse() (*models.ParsedPML, error) {
 // Decode decodes standard ParsedPML into SELinux-specific DecodedPML
 func (p *Parser) Decode(pml *models.ParsedPML) (*models.DecodedPML, error) {
 	decoded := &models.DecodedPML{
-		Model:               pml.Model,
-		Policies:            make([]models.DecodedPolicy, 0),
-		Roles:               make([]models.RoleRelation, 0),
-		TypeAttributes:      make([]models.RoleRelation, 0),
-		Booleans:            make([]models.DecodedBoolean, 0),
-		Transitions:         make([]models.TransitionInfo, 0),
-		ConditionalPolicies: make([]models.DecodedPolicy, 0),
+		Model:          pml.Model,
+		Policies:       make([]models.DecodedPolicy, 0),
+		Roles:          make([]models.RoleRelation, 0),
+		TypeAttributes: make([]models.RoleRelation, 0),
+		Transitions:    make([]models.TransitionInfo, 0),
 	}
 
 	// Decode policies
@@ -76,26 +74,15 @@ func (p *Parser) Decode(pml *models.ParsedPML) (*models.DecodedPML, error) {
 
 		decoded.Policies = append(decoded.Policies, *decodedPolicy)
 
-		// Categorize special policies
-		if decodedPolicy.Condition != "" {
-			decoded.ConditionalPolicies = append(decoded.ConditionalPolicies, *decodedPolicy)
-		}
-
+		// Extract type transitions
 		if decodedPolicy.IsTransition && decodedPolicy.TransitionInfo != nil {
 			decoded.Transitions = append(decoded.Transitions, *decodedPolicy.TransitionInfo)
 		}
 	}
 
-	// Decode roles and booleans
+	// Decode roles
 	for _, role := range pml.Roles {
-		if role.Type == "g2" && strings.HasPrefix(role.Role, "bool:") {
-			// This is a boolean definition
-			boolean, err := p.decodeBoolean(&role)
-			if err != nil {
-				return nil, err
-			}
-			decoded.Booleans = append(decoded.Booleans, *boolean)
-		} else if role.Type == "g" {
+		if role.Type == "g" {
 			// Standard role relation
 			decoded.Roles = append(decoded.Roles, role)
 		} else if role.Type == "g2" {
@@ -132,21 +119,6 @@ func (p *Parser) decodePolicy(policy *models.Policy) (*models.DecodedPolicy, err
 	}
 
 	return decoded, nil
-}
-
-// decodeBoolean decodes a g2 role relation into a boolean definition
-func (p *Parser) decodeBoolean(relation *models.RoleRelation) (*models.DecodedBoolean, error) {
-	if !strings.HasPrefix(relation.Role, "bool:") {
-		return nil, fmt.Errorf("not a boolean definition: %s", relation.Role)
-	}
-
-	value := strings.TrimPrefix(relation.Role, "bool:")
-	boolValue := value == "true"
-
-	return &models.DecodedBoolean{
-		Name:         relation.Member,
-		DefaultValue: boolValue,
-	}, nil
 }
 
 // parseModel parses the PML model configuration file (.conf)

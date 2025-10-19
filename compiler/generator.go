@@ -43,22 +43,15 @@ func (g *Generator) Generate() (*models.SELinuxPolicy, error) {
 	}
 
 	policy := &models.SELinuxPolicy{
-		ModuleName:   moduleName,
-		Version:      "1.0.0",
-		Types:        make([]models.TypeDeclaration, 0),
-		Rules:        make([]models.AllowRule, 0),
-		DenyRules:    make([]models.DenyRule, 0),
+		ModuleName: moduleName,
+		Version:    "1.0.0",
+		Types:      make([]models.TypeDeclaration, 0),
+		Rules:      make([]models.AllowRule, 0),
+		// DenyRules removed - not supported in simplified version
 		Transitions:  make([]models.TypeTransition, 0),
 		FileContexts: make([]models.FileContext, 0),
-		Booleans:     make([]models.BooleanDeclaration, 0),
-	}
-
-	// Convert booleans
-	for _, boolean := range g.decoded.Booleans {
-		policy.Booleans = append(policy.Booleans, models.BooleanDeclaration{
-			Name:         boolean.Name,
-			DefaultValue: boolean.DefaultValue,
-		})
+		Capabilities: make([]models.CapabilityRule, 0),
+		PortBindings: make([]models.PortBinding, 0),
 	}
 
 	// Extract types from subjects and objects
@@ -153,13 +146,10 @@ func (g *Generator) convertPolicies(policy *models.SELinuxPolicy) error {
 			}
 			policy.Rules = append(policy.Rules, rule)
 		} else if pmlPolicy.Effect == "deny" {
-			rule := models.DenyRule{
-				SourceType:  sourceType,
-				TargetType:  targetType,
-				Class:       class,
-				Permissions: perms,
-			}
-			policy.DenyRules = append(policy.DenyRules, rule)
+			// Deny rules not supported in simplified version - log warning
+			// In production, you might want to use audit_deny or neverallow
+			fmt.Printf("Warning: Deny rule skipped (not supported): %s -> %s:%s\n",
+				sourceType, targetType, class)
 		}
 	}
 
@@ -270,12 +260,10 @@ func (g *Generator) generateFileContexts(policy *models.SELinuxPolicy) error {
 		for _, pattern := range patterns {
 			fc := models.FileContext{
 				PathPattern: pattern.Pattern,
-				FileType:    pattern.FileType,
-				User:        "system_u",
-				Role:        "object_r",
-				Level:       "s0",
+				FileType:    pattern.FileType, // -- or -d
+				SELinuxType: objectType,
+				Comment:     fmt.Sprintf("Generated from PML policy: %s", pmlPolicy.Object),
 			}
-			fc.Context = fmt.Sprintf("%s:%s:%s:%s", fc.User, fc.Role, objectType, fc.Level)
 
 			policy.FileContexts = append(policy.FileContexts, fc)
 		}

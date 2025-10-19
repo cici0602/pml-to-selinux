@@ -45,12 +45,6 @@ type TransitionInfo struct {
 	NewType    string // Resulting type (from Effect field for p2)
 }
 
-// DecodedBoolean contains decoded boolean information
-type DecodedBoolean struct {
-	Name         string // Boolean name (from Member in g2)
-	DefaultValue bool   // Default value (decoded from "bool:true" or "bool:false")
-}
-
 // ParsedPML contains all parsed PML data in standard Casbin format
 type ParsedPML struct {
 	Model    *PMLModel
@@ -61,11 +55,9 @@ type ParsedPML struct {
 // DecodedPML contains decoded PML data with SELinux-specific structures
 // This is created by decoding the standard ParsedPML
 type DecodedPML struct {
-	Model               *PMLModel
-	Policies            []DecodedPolicy  // Decoded policies with conditions
-	Roles               []RoleRelation   // Standard role relations (g)
-	TypeAttributes      []RoleRelation   // Type attributes (g2 without bool: prefix)
-	Booleans            []DecodedBoolean // Decoded booleans (g2 with bool: prefix)
-	Transitions         []TransitionInfo // Extracted type transitions (from p2)
-	ConditionalPolicies []DecodedPolicy  // Policies with conditions
+	Model          *PMLModel
+	Policies       []DecodedPolicy  // Decoded policies
+	Roles          []RoleRelation   // Standard role relations (g)
+	TypeAttributes []RoleRelation   // Type attributes (g2)
+	Transitions    []TransitionInfo // Extracted type transitions (from p2)
 }

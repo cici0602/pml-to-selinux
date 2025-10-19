@@ -10,15 +10,13 @@ import (
 )
 
 var (
-	modelPath   string
-	policyPath  string
-	outputDir   string
-	moduleName  string
-	validate    bool
-	optimize    bool
-	verbose     bool
-	modelPath2  string
-	policyPath2 string
+	modelPath  string
+	policyPath string
+	outputDir  string
+	moduleName string
+	validate   bool
+	optimize   bool
+	verbose    bool
 )
 
 func main() {
@@ -66,38 +64,6 @@ language and automatically generate SELinux policies.`,
 	validateCmd.MarkFlagRequired("model")
 	validateCmd.MarkFlagRequired("policy")
 
-	// Analyze command
-	analyzeCmd := &cobra.Command{
-		Use:   "analyze",
-		Short: "Analyze PML policy",
-		Long:  "Analyze PML policy and display statistics and potential issues",
-		Run:   runAnalyze,
-	}
-
-	analyzeCmd.Flags().StringVarP(&modelPath, "model", "m", "", "Path to PML model file (required)")
-	analyzeCmd.Flags().StringVarP(&policyPath, "policy", "p", "", "Path to PML policy file (required)")
-
-	analyzeCmd.MarkFlagRequired("model")
-	analyzeCmd.MarkFlagRequired("policy")
-
-	// Diff command
-	diffCmd := &cobra.Command{
-		Use:   "diff",
-		Short: "Compare two PML policies",
-		Long:  "Compare two PML policy sets and show the differences",
-		Run:   runDiff,
-	}
-
-	diffCmd.Flags().StringVarP(&modelPath, "model1", "m", "", "Path to first PML model file (required)")
-	diffCmd.Flags().StringVarP(&policyPath, "policy1", "p", "", "Path to first PML policy file (required)")
-	diffCmd.Flags().StringVar(&modelPath2, "model2", "", "Path to second PML model file (required)")
-	diffCmd.Flags().StringVar(&policyPath2, "policy2", "", "Path to second PML policy file (required)")
-
-	diffCmd.MarkFlagRequired("model1")
-	diffCmd.MarkFlagRequired("policy1")
-	diffCmd.MarkFlagRequired("model2")
-	diffCmd.MarkFlagRequired("policy2")
-
 	// Init command
 	initCmd := &cobra.Command{
 		Use:   "init [project-name]",
@@ -118,8 +84,6 @@ language and automatically generate SELinux policies.`,
 
 	rootCmd.AddCommand(compileCmd)
 	rootCmd.AddCommand(validateCmd)
-	rootCmd.AddCommand(analyzeCmd)
-	rootCmd.AddCommand(diffCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(versionCmd)
 
@@ -162,8 +126,8 @@ func runCompile(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	if verbose {
-		fmt.Printf("✓ Decoded %d policies, %d transitions, %d booleans\n",
-			len(decoded.Policies), len(decoded.Transitions), len(decoded.Booleans))
+		fmt.Printf("✓ Decoded %d policies, %d transitions\n",
+			len(decoded.Policies), len(decoded.Transitions))
 	}
 
 	// 3. Analyze and validate
@@ -331,131 +295,6 @@ func runValidate(cmd *cobra.Command, args []string) {
 	}
 }
 
-func runAnalyze(cmd *cobra.Command, args []string) {
-	fmt.Println("Analyzing PML policy...")
-
-	// Parse
-	parser := compiler.NewParser(modelPath, policyPath)
-	pml, err := parser.Parse()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Parse error: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Decode
-	decoded, err := parser.Decode(pml)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Decode error: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Analyze
-	analyzer := compiler.NewAnalyzer(decoded)
-	err = analyzer.Analyze()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Analysis error: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Display statistics
-	stats := analyzer.GetStats()
-	fmt.Println("\n=== Policy Statistics ===")
-	fmt.Printf("Total Policies:    %d\n", stats.TotalPolicies)
-	fmt.Printf("Allow Rules:       %d\n", stats.AllowRules)
-	fmt.Printf("Deny Rules:        %d\n", stats.DenyRules)
-	fmt.Printf("Unique Subjects:   %d\n", stats.UniqueSubjects)
-	fmt.Printf("Unique Objects:    %d\n", stats.UniqueObjects)
-	fmt.Printf("Unique Actions:    %d\n", stats.UniqueActions)
-	fmt.Printf("Role Relations:    %d\n", stats.RoleRelations)
-	fmt.Printf("Conflicts:         %d\n", stats.Conflicts)
-
-	if len(stats.SubjectTypes) > 0 {
-		fmt.Println("\n=== Subject Types ===")
-		for subject, count := range stats.SubjectTypes {
-			fmt.Printf("  %-30s %d rules\n", subject, count)
-		}
-	}
-
-	if len(stats.ActionTypes) > 0 {
-		fmt.Println("\n=== Action Types ===")
-		for action, count := range stats.ActionTypes {
-			fmt.Printf("  %-20s %d times\n", action, count)
-		}
-	}
-
-	if stats.Conflicts > 0 {
-		fmt.Println("\n=== Conflicts ===")
-		conflicts := analyzer.GetConflicts()
-		for i, conflict := range conflicts {
-			fmt.Printf("%d. %s\n", i+1, conflict.Reason)
-			fmt.Printf("   Allow: %s -> %s [%s]\n",
-				conflict.AllowRule.Subject, conflict.AllowRule.Object, conflict.AllowRule.Action)
-			fmt.Printf("   Deny:  %s -> %s [%s]\n",
-				conflict.DenyRule.Subject, conflict.DenyRule.Object, conflict.DenyRule.Action)
-		}
-	}
-
-	fmt.Println("\n✓ Analysis complete")
-}
-
-func runDiff(cmd *cobra.Command, args []string) {
-	fmt.Println("Comparing PML policies...")
-
-	// Parse and decode first policy
-	parser1 := compiler.NewParser(modelPath, policyPath)
-	pml1, err := parser1.Parse()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Error parsing first policy: %v\n", err)
-		os.Exit(1)
-	}
-	decoded1, err := parser1.Decode(pml1)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Error decoding first policy: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Generate first SELinux policy
-	gen1 := compiler.NewGenerator(decoded1, "")
-	policy1, err := gen1.Generate()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Error generating first policy: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Parse and decode second policy
-	parser2 := compiler.NewParser(modelPath2, policyPath2)
-	pml2, err := parser2.Parse()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Error parsing second policy: %v\n", err)
-		os.Exit(1)
-	}
-	decoded2, err := parser2.Decode(pml2)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Error decoding second policy: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Generate second SELinux policy
-	gen2 := compiler.NewGenerator(decoded2, "")
-	policy2, err := gen2.Generate()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "✗ Error generating second policy: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Compare policies
-	differ := compiler.NewDiffer(policy1, policy2)
-	diffResult := differ.Diff()
-
-	// Display results
-	fmt.Println("\nPolicy Comparison:")
-	fmt.Printf("  Policy 1: %s/%s\n", modelPath, policyPath)
-	fmt.Printf("  Policy 2: %s/%s\n\n", modelPath2, policyPath2)
-
-	output := compiler.FormatDiff(diffResult)
-	fmt.Print(output)
-}
-
 func runInit(cmd *cobra.Command, args []string) {
 	projectName := args[0]
 	fmt.Printf("Creating new PML project: %s\n", projectName)
@@ -531,11 +370,6 @@ pml2selinux compile -m model.conf -p policy.csv -o output
 ### Validate the policy
 ` + "```bash" + `
 pml2selinux validate -m model.conf -p policy.csv
-` + "```" + `
-
-### Analyze the policy
-` + "```bash" + `
-pml2selinux analyze -m model.conf -p policy.csv
 ` + "```" + `
 
 ### Install the generated policy

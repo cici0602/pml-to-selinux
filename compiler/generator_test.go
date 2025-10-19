@@ -46,7 +46,6 @@ func TestGenerator_Generate(t *testing.T) {
 		Policies:       decodedPolicies,
 		Roles:          []models.RoleRelation{},
 		TypeAttributes: []models.RoleRelation{},
-		Booleans:       []models.DecodedBoolean{},
 		Transitions:    []models.TransitionInfo{},
 	}
 
@@ -95,7 +94,6 @@ func TestGenerator_InferModuleName(t *testing.T) {
 		},
 		Roles:          []models.RoleRelation{},
 		TypeAttributes: []models.RoleRelation{},
-		Booleans:       []models.DecodedBoolean{},
 		Transitions:    []models.TransitionInfo{},
 	}
 
@@ -117,7 +115,6 @@ func TestGenerator_ActionToPermissions(t *testing.T) {
 		Policies:       []models.DecodedPolicy{},
 		Roles:          []models.RoleRelation{},
 		TypeAttributes: []models.RoleRelation{},
-		Booleans:       []models.DecodedBoolean{},
 		Transitions:    []models.TransitionInfo{},
 	}
 	gen := NewGenerator(decoded, "test")

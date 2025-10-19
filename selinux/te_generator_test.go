@@ -97,12 +97,9 @@ func TestTEGenerator_EmptyPolicy(t *testing.T) {
 	}
 }
 
-// TestTEGenerator_BooleanDeclarations tests boolean generation
-func TestTEGenerator_BooleanDeclarations(t *testing.T) {
 	policy := &models.SELinuxPolicy{
 		ModuleName: "test",
 		Version:    "1.0.0",
-		Booleans: []models.BooleanDeclaration{
 			{
 				Name:         "httpd_enable_homedirs",
 				DefaultValue: false,
@@ -353,7 +350,6 @@ func TestTEGenerator_SortedOutput(t *testing.T) {
 			{TypeName: "atype_t"},
 			{TypeName: "mtype_t"},
 		},
-		Booleans: []models.BooleanDeclaration{
 			{Name: "zboolean", DefaultValue: false},
 			{Name: "aboolean", DefaultValue: true},
 		},
@@ -397,7 +393,6 @@ func TestTEGenerator_ComplexPolicy(t *testing.T) {
 	policy := &models.SELinuxPolicy{
 		ModuleName: "httpd",
 		Version:    "1.0.0",
-		Booleans: []models.BooleanDeclaration{
 			{
 				Name:         "httpd_enable_homedirs",
 				DefaultValue: false,
@@ -486,18 +481,14 @@ func TestGenerateTE(t *testing.T) {
 	}
 }
 
-// TestTEGenerator_ConditionalBlocks tests conditional policy generation
-func TestTEGenerator_ConditionalBlocks(t *testing.T) {
 	policy := &models.SELinuxPolicy{
 		ModuleName: "httpd",
 		Version:    "1.0.0",
-		Booleans: []models.BooleanDeclaration{
 			{
 				Name:         "httpd_enable_homedirs",
 				DefaultValue: false,
 			},
 		},
-		ConditionalBlocks: []models.ConditionalBlock{
 			{
 				BooleanExpr: "httpd_enable_homedirs",
 				ThenRules: []models.AllowRule{
@@ -545,7 +536,6 @@ func TestTEGenerator_ConditionalWithElse(t *testing.T) {
 	policy := &models.SELinuxPolicy{
 		ModuleName: "test",
 		Version:    "1.0.0",
-		ConditionalBlocks: []models.ConditionalBlock{
 			{
 				BooleanExpr: "test_boolean",
 				ThenRules: []models.AllowRule{
@@ -599,7 +589,6 @@ func TestTEGenerator_NegatedBoolean(t *testing.T) {
 	policy := &models.SELinuxPolicy{
 		ModuleName: "test",
 		Version:    "1.0.0",
-		ConditionalBlocks: []models.ConditionalBlock{
 			{
 				BooleanExpr: "!allow_feature",
 				ThenRules: []models.AllowRule{

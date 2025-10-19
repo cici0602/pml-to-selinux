@@ -120,7 +120,6 @@ func TestValidateModel(t *testing.T) {
 				Policies:       []models.DecodedPolicy{},
 				Roles:          []models.RoleRelation{},
 				TypeAttributes: []models.RoleRelation{},
-				Booleans:       []models.DecodedBoolean{},
 				Transitions:    []models.TransitionInfo{},
 			}
 			analyzer := NewAnalyzer(decoded)
@@ -233,7 +232,6 @@ func TestValidatePolicies(t *testing.T) {
 				Policies:       decodedPolicies,
 				Roles:          []models.RoleRelation{},
 				TypeAttributes: []models.RoleRelation{},
-				Booleans:       []models.DecodedBoolean{},
 				Transitions:    []models.TransitionInfo{},
 			}
 			analyzer := NewAnalyzer(decoded)
@@ -329,7 +327,6 @@ func TestDetectConflicts(t *testing.T) {
 				Policies:       decodedPolicies,
 				Roles:          []models.RoleRelation{},
 				TypeAttributes: []models.RoleRelation{},
-				Booleans:       []models.DecodedBoolean{},
 				Transitions:    []models.TransitionInfo{},
 			}
 			analyzer := NewAnalyzer(decoded)
@@ -382,7 +379,6 @@ func TestGenerateStats(t *testing.T) {
 		Policies:       decodedPolicies,
 		Roles:          roles,
 		TypeAttributes: []models.RoleRelation{},
-		Booleans:       []models.DecodedBoolean{},
 		Transitions:    []models.TransitionInfo{},
 	}
 
@@ -464,7 +460,6 @@ func TestAnalyzeIntegration(t *testing.T) {
 		Policies:       decodedPolicies,
 		Roles:          roles,
 		TypeAttributes: []models.RoleRelation{},
-		Booleans:       []models.DecodedBoolean{},
 		Transitions:    []models.TransitionInfo{},
 	}
 
@@ -526,7 +521,6 @@ func TestPathsOverlap(t *testing.T) {
 		Policies:       []models.DecodedPolicy{},
 		Roles:          []models.RoleRelation{},
 		TypeAttributes: []models.RoleRelation{},
-		Booleans:       []models.DecodedBoolean{},
 		Transitions:    []models.TransitionInfo{},
 	})
 

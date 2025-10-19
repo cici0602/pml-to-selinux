@@ -8,7 +8,8 @@ import (
 	"github.com/cici0602/pml-to-selinux/models"
 )
 
-// MacroGenerator handles generation of SELinux macros and require statements
+// MacroGenerator handles generation of SELinux require statements
+// Simplified version - no complex macros, just basic require blocks
 type MacroGenerator struct {
 	policy *models.SELinuxPolicy
 }
@@ -41,17 +42,13 @@ func (g *MacroGenerator) GenerateRequireBlock() string {
 		}
 	}
 
-	// Extract from deny rules
-	for _, rule := range g.policy.DenyRules {
-		types[rule.SourceType] = true
-		types[rule.TargetType] = true
-
-		if classes[rule.Class] == nil {
-			classes[rule.Class] = make(map[string]bool)
+	// Extract from capabilities
+	for _, cap := range g.policy.Capabilities {
+		types[cap.SourceType] = true
+		if classes["capability"] == nil {
+			classes["capability"] = make(map[string]bool)
 		}
-		for _, perm := range rule.Permissions {
-			classes[rule.Class][perm] = true
-		}
+		classes["capability"][cap.Capability] = true
 	}
 
 	// Extract from transitions
@@ -59,185 +56,104 @@ func (g *MacroGenerator) GenerateRequireBlock() string {
 		types[trans.SourceType] = true
 		types[trans.TargetType] = true
 		types[trans.NewType] = true
-
-		if classes[trans.Class] == nil {
-			classes[trans.Class] = make(map[string]bool)
-		}
 	}
 
-	// Remove policy's own types from require block
+	// Remove declared types (they don't need to be in require)
+	declaredTypes := make(map[string]bool)
 	for _, typeDecl := range g.policy.Types {
-		delete(types, typeDecl.TypeName)
+		declaredTypes[typeDecl.TypeName] = true
 	}
 
-	if len(types) == 0 && len(classes) == 0 {
-		return ""
-	}
-
+	// Start require block
 	builder.WriteString("require {\n")
 
-	// Write type requirements
-	if len(types) > 0 {
-		typeList := make([]string, 0, len(types))
-		for t := range types {
-			typeList = append(typeList, t)
-		}
-		sort.Strings(typeList)
-
-		for _, t := range typeList {
-			builder.WriteString(fmt.Sprintf("\ttype %s;\n", t))
+	// Generate type statements
+	externalTypes := make([]string, 0)
+	for typeName := range types {
+		if !declaredTypes[typeName] && typeName != "self" {
+			externalTypes = append(externalTypes, typeName)
 		}
 	}
+	sort.Strings(externalTypes)
 
-	// Write class requirements
-	if len(classes) > 0 {
-		classList := make([]string, 0, len(classes))
-		for c := range classes {
-			classList = append(classList, c)
-		}
-		sort.Strings(classList)
-
-		for _, class := range classList {
-			perms := make([]string, 0, len(classes[class]))
-			for p := range classes[class] {
-				perms = append(perms, p)
-			}
-			sort.Strings(perms)
-
-			builder.WriteString(fmt.Sprintf("\tclass %s { %s };\n",
-				class, strings.Join(perms, " ")))
-		}
+	if len(externalTypes) > 0 {
+		builder.WriteString("\ttype ")
+		builder.WriteString(strings.Join(externalTypes, ", "))
+		builder.WriteString(";\n")
 	}
 
-	builder.WriteString("}\n\n")
+	// Generate class statements
+	sortedClasses := make([]string, 0, len(classes))
+	for class := range classes {
+		sortedClasses = append(sortedClasses, class)
+	}
+	sort.Strings(sortedClasses)
+
+	for _, class := range sortedClasses {
+		perms := make([]string, 0, len(classes[class]))
+		for perm := range classes[class] {
+			perms = append(perms, perm)
+		}
+		sort.Strings(perms)
+
+		builder.WriteString(fmt.Sprintf("\tclass %s { %s };\n",
+			class, strings.Join(perms, " ")))
+	}
+
+	builder.WriteString("}\n")
+
 	return builder.String()
 }
 
-// GenerateCommonMacros generates common SELinux macros for the module
-func (g *MacroGenerator) GenerateCommonMacros() []models.MacroDefinition {
-	macros := make([]models.MacroDefinition, 0)
-
-	// Generate read macro
-	readMacro := models.MacroDefinition{
-		Name:        fmt.Sprintf("%s_read", g.policy.ModuleName),
-		Description: fmt.Sprintf("Allow domain to read %s files", g.policy.ModuleName),
-		Parameters:  []string{"domain"},
-		Body: fmt.Sprintf(`gen_require(%s
-		type %s_t;
-	%s)
-
-	allow $1 %s_t:file read_file_perms;
-	allow $1 %s_t:dir list_dir_perms;
-`, "`", g.policy.ModuleName, "'", g.policy.ModuleName, g.policy.ModuleName),
-	}
-	macros = append(macros, readMacro)
-
-	// Generate write macro
-	writeMacro := models.MacroDefinition{
-		Name:        fmt.Sprintf("%s_write", g.policy.ModuleName),
-		Description: fmt.Sprintf("Allow domain to write %s files", g.policy.ModuleName),
-		Parameters:  []string{"domain"},
-		Body: fmt.Sprintf(`gen_require(%s
-		type %s_t;
-	%s)
-
-	allow $1 %s_t:file write_file_perms;
-	allow $1 %s_t:dir rw_dir_perms;
-`, "`", g.policy.ModuleName, "'", g.policy.ModuleName, g.policy.ModuleName),
-	}
-	macros = append(macros, writeMacro)
-
-	// Generate execute macro
-	executeMacro := models.MacroDefinition{
-		Name:        fmt.Sprintf("%s_exec", g.policy.ModuleName),
-		Description: fmt.Sprintf("Allow domain to execute %s binaries", g.policy.ModuleName),
-		Parameters:  []string{"domain"},
-		Body: fmt.Sprintf(`gen_require(%s
-		type %s_exec_t;
-	%s)
-
-	can_exec($1, %s_exec_t)
-`, "`", g.policy.ModuleName, "'", g.policy.ModuleName),
-	}
-	macros = append(macros, executeMacro)
-
-	// Generate domain transition macro
-	transitionMacro := models.MacroDefinition{
-		Name:        fmt.Sprintf("%s_domtrans", g.policy.ModuleName),
-		Description: fmt.Sprintf("Allow domain to transition to %s domain", g.policy.ModuleName),
-		Parameters:  []string{"domain"},
-		Body: fmt.Sprintf(`gen_require(%s
-		type %s_t, %s_exec_t;
-	%s)
-
-	domtrans_pattern($1, %s_exec_t, %s_t)
-`, "`", g.policy.ModuleName, g.policy.ModuleName, "'", g.policy.ModuleName, g.policy.ModuleName),
-	}
-	macros = append(macros, transitionMacro)
-
-	return macros
-}
-
-// GenerateMacroFile generates the content for macros (can be included in .te or separate file)
-func (g *MacroGenerator) GenerateMacroFile() string {
+// GenerateCommonMacros generates commonly used macros (simplified)
+// For production use, reference standard refpolicy macros instead
+func (g *MacroGenerator) GenerateCommonMacros() string {
 	var builder strings.Builder
 
-	builder.WriteString("########################################\n")
-	builder.WriteString(fmt.Sprintf("# SELinux Macros for %s\n", g.policy.ModuleName))
-	builder.WriteString("# Generated by PML-to-SELinux Compiler\n")
-	builder.WriteString("########################################\n\n")
+	builder.WriteString("# Common macro shortcuts (optional)\n")
+	builder.WriteString("# In production, use standard refpolicy macros instead\n\n")
 
-	// Generate common macros
-	macros := g.GenerateCommonMacros()
-
-	for _, macro := range macros {
-		builder.WriteString("########################################\n")
-		builder.WriteString(fmt.Sprintf("## <summary>\n"))
-		builder.WriteString(fmt.Sprintf("##\t%s\n", macro.Description))
-		builder.WriteString("## </summary>\n")
-		builder.WriteString("## <param name=\"domain\">\n")
-		builder.WriteString("##\t<summary>\n")
-		builder.WriteString("##\tDomain allowed access.\n")
-		builder.WriteString("##\t</summary>\n")
-		builder.WriteString("## </param>\n")
-		builder.WriteString("#\n")
-		builder.WriteString(fmt.Sprintf("interface(`%s',`\n", macro.Name))
-		builder.WriteString(macro.Body)
-		builder.WriteString("')\n\n")
+	// Only generate if there are file/dir rules
+	hasFileRules := false
+	for _, rule := range g.policy.Rules {
+		if rule.Class == "file" || rule.Class == "dir" {
+			hasFileRules = true
+			break
+		}
 	}
 
-	// Add custom macros from policy
-	for _, macro := range g.policy.Macros {
-		builder.WriteString("########################################\n")
-		builder.WriteString(fmt.Sprintf("## <summary>\n"))
-		builder.WriteString(fmt.Sprintf("##\t%s\n", macro.Description))
-		builder.WriteString("## </summary>\n")
-
-		for i, param := range macro.Parameters {
-			builder.WriteString(fmt.Sprintf("## <param name=\"%s\">\n", param))
-			builder.WriteString("##\t<summary>\n")
-			builder.WriteString(fmt.Sprintf("##\tParameter %d\n", i+1))
-			builder.WriteString("##\t</summary>\n")
-			builder.WriteString("## </param>\n")
-		}
-
-		builder.WriteString("#\n")
-		builder.WriteString(fmt.Sprintf("interface(`%s',`\n", macro.Name))
-		builder.WriteString(macro.Body)
-		builder.WriteString("')\n\n")
+	if hasFileRules {
+		builder.WriteString("# Macro for basic file read access\n")
+		builder.WriteString("# files_read_file(domain, file_type)\n")
+		builder.WriteString("# Expands to: allow domain file_type:file { read open getattr };\n\n")
 	}
 
 	return builder.String()
 }
 
-// GenerateRequireStatements analyzes the policy and generates appropriate require statements
-func GenerateRequireStatements(policy *models.SELinuxPolicy) string {
-	generator := NewMacroGenerator(policy)
-	return generator.GenerateRequireBlock()
-}
+// InferRequiredAttributes returns common attributes that should be added
+func (g *MacroGenerator) InferRequiredAttributes() []string {
+	attributes := make(map[string]bool)
 
-// GenerateMacros generates all macros for the policy
-func GenerateMacros(policy *models.SELinuxPolicy) string {
-	generator := NewMacroGenerator(policy)
-	return generator.GenerateMacroFile()
+	// Check what attributes we might need
+	for _, rule := range g.policy.Rules {
+		if strings.HasSuffix(rule.SourceType, "_t") {
+			attributes["domain"] = true
+		}
+		if strings.HasSuffix(rule.TargetType, "_exec_t") {
+			attributes["exec_type"] = true
+			attributes["file_type"] = true
+		}
+		if rule.Class == "file" || rule.Class == "dir" {
+			attributes["file_type"] = true
+		}
+	}
+
+	result := make([]string, 0, len(attributes))
+	for attr := range attributes {
+		result = append(result, attr)
+	}
+	sort.Strings(result)
+
+	return result
 }
