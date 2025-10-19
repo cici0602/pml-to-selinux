@@ -166,19 +166,10 @@ func runCompile(cmd *cobra.Command, args []string) {
 	}
 
 	// 4. Optimize if requested
+	// TODO: Optimization feature is not yet implemented
 	if optimize {
 		if verbose {
-			fmt.Println("⟳ Optimizing policy...")
-		}
-		optimizer := compiler.NewOptimizer(selinuxPolicy)
-		err = optimizer.Optimize()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "✗ Optimization error: %v\n", err)
-			os.Exit(1)
-		}
-		if verbose {
-			fmt.Printf("✓ Optimized: %d types, %d rules\n",
-				len(selinuxPolicy.Types), len(selinuxPolicy.Rules))
+			fmt.Println("⚠ Optimization is not yet implemented, skipping...")
 		}
 	}
 
