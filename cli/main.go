@@ -160,9 +160,9 @@ func runCompile(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	if verbose {
-		fmt.Printf("✓ Generated %d types, %d allow rules, %d deny rules, %d file contexts\n",
+		fmt.Printf("✓ Generated %d types, %d allow rules, %d file contexts\n",
 			len(selinuxPolicy.Types), len(selinuxPolicy.Rules),
-			len(selinuxPolicy.DenyRules), len(selinuxPolicy.FileContexts))
+			len(selinuxPolicy.FileContexts))
 	}
 
 	// 4. Optimize if requested

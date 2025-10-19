@@ -20,7 +20,7 @@ type Analyzer struct {
 type AnalysisStats struct {
 	TotalPolicies  int
 	AllowRules     int
-	DenyRules      int
+	DenyRules      int // Deprecated in MVP, kept for backward compatibility
 	UniqueSubjects int
 	UniqueObjects  int
 	UniqueActions  int
@@ -36,7 +36,7 @@ type AnalysisStats struct {
 // ConflictInfo represents a policy conflict
 type ConflictInfo struct {
 	AllowRule models.DecodedPolicy
-	DenyRule  models.DecodedPolicy
+	DenyRule  models.DecodedPolicy // Deprecated in MVP
 	Reason    string
 }
 
@@ -169,6 +169,16 @@ func (a *Analyzer) validatePolicies() error {
 
 // validatePathPattern validates if a path pattern is valid
 func (a *Analyzer) validatePathPattern(pattern string) error {
+	// Allow special keywords
+	if pattern == "self" {
+		return nil
+	}
+
+	// Allow port patterns: tcp:PORT, udp:PORT
+	if strings.HasPrefix(pattern, "tcp:") || strings.HasPrefix(pattern, "udp:") {
+		return nil
+	}
+
 	// Check if pattern starts with /
 	if !strings.HasPrefix(pattern, "/") {
 		// Allow port numbers (all digits)
@@ -211,7 +221,7 @@ func isValidPathChar(ch rune) bool {
 		(ch >= 'A' && ch <= 'Z') ||
 		(ch >= '0' && ch <= '9') ||
 		ch == '/' || ch == '*' || ch == '.' || ch == '-' || ch == '_' ||
-		ch == '?' || ch == '=' // Allow for condition encoding like ?cond=name
+		ch == '(' || ch == ')' || ch == '?' || ch == '=' || ch == ':' // Allow regex chars and port patterns
 }
 
 // detectConflicts finds conflicting allow and deny rules
@@ -305,39 +315,36 @@ func (a *Analyzer) pathsOverlap(path1, path2 string) bool {
 
 // generateStats generates statistics about the policies
 func (a *Analyzer) generateStats() {
-	stats := a.stats
-
-	stats.TotalPolicies = len(a.decoded.Policies)
-	stats.RoleRelations = len(a.decoded.Roles) + len(a.decoded.TypeAttributes)
-	stats.Transitions = len(a.decoded.Transitions)
+	a.stats.TotalPolicies = len(a.decoded.Policies)
 
 	uniqueSubjects := make(map[string]bool)
 	uniqueObjects := make(map[string]bool)
 	uniqueActions := make(map[string]bool)
 
 	for _, policy := range a.decoded.Policies {
-		// Count allow and deny rules
-		if policy.Effect == "allow" {
-			stats.AllowRules++
-		} else if policy.Effect == "deny" {
-			stats.DenyRules++
+		// Count allow rules (deny not supported in MVP)
+		if policy.Effect == "allow" || policy.Effect == "" {
+			a.stats.AllowRules++
 		}
+		// DenyRules count remains 0 in MVP
 
 		// Track unique values
 		uniqueSubjects[policy.Subject] = true
 		uniqueObjects[policy.Object] = true
 		uniqueActions[policy.Action] = true
 
-		// Count per type
-		stats.SubjectTypes[policy.Subject]++
-		stats.ObjectPatterns[policy.Object]++
-		stats.ActionTypes[policy.Action]++
+		// Count rules per subject/object/action
+		a.stats.SubjectTypes[policy.Subject]++
+		a.stats.ObjectPatterns[policy.Object]++
+		a.stats.ActionTypes[policy.Action]++
 	}
 
-	stats.UniqueSubjects = len(uniqueSubjects)
-	stats.UniqueObjects = len(uniqueObjects)
-	stats.UniqueActions = len(uniqueActions)
+	a.stats.UniqueSubjects = len(uniqueSubjects)
+	a.stats.UniqueObjects = len(uniqueObjects)
+	a.stats.UniqueActions = len(uniqueActions)
 }
+
+// GetConflicts returns detected policy conflicts
 
 // GetStats returns the analysis statistics
 func (a *Analyzer) GetStats() *AnalysisStats {

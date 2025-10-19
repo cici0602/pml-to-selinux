@@ -5,7 +5,7 @@
 p, myweb_t, /opt/myweb/bin/myweb, execute, file, allow
 
 # Read configuration files
-p, myweb_t, /opt/myweb/config(/.*  )?, read, file, allow
+p, myweb_t, /opt/myweb/config(/.*)?, read, file, allow
 
 # Write and create data files
 p, myweb_t, /var/lib/myweb(/.*)?, read, file, allow

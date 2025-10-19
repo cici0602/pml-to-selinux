@@ -39,8 +39,14 @@ func (tm *TypeMapper) PathToType(path string) string {
 		return customType
 	}
 
+	// Remove trailing /* pattern
+	cleanPath := strings.TrimSuffix(path, "/*")
+	// Remove SELinux regex patterns like (/.*)?
+	cleanPath = strings.TrimSuffix(cleanPath, "(/.*)?")
+	cleanPath = strings.TrimSuffix(cleanPath, "(.*)")
+
 	// Extract base path without wildcards
-	basePath := ExtractBasePath(path)
+	basePath := ExtractBasePath(cleanPath)
 
 	// Normalize the path
 	basePath = NormalizePath(basePath)
@@ -69,6 +75,13 @@ func (tm *TypeMapper) PathToType(path string) string {
 	// Replace other special characters with underscores
 	typeName = strings.ReplaceAll(typeName, "+", "_")
 	typeName = strings.ReplaceAll(typeName, "*", "")
+	// Remove regex characters that might be in patterns
+	typeName = strings.ReplaceAll(typeName, "(", "")
+	typeName = strings.ReplaceAll(typeName, ")", "")
+	typeName = strings.ReplaceAll(typeName, "?", "")
+	typeName = strings.ReplaceAll(typeName, "[", "")
+	typeName = strings.ReplaceAll(typeName, "]", "")
+	typeName = strings.ReplaceAll(typeName, ":", "_")
 
 	// Clean up any double underscores
 	for strings.Contains(typeName, "__") {

@@ -135,12 +135,12 @@ func (d *Differ) compareFileContexts(result *DiffResult) {
 	contexts2 := make(map[string]bool)
 
 	for _, fc := range d.policy1.FileContexts {
-		key := fmt.Sprintf("%s -> %s", fc.PathPattern, fc.Context)
+		key := fmt.Sprintf("%s -> %s", fc.PathPattern, fc.SELinuxType)
 		contexts1[key] = true
 	}
 
 	for _, fc := range d.policy2.FileContexts {
-		key := fmt.Sprintf("%s -> %s", fc.PathPattern, fc.Context)
+		key := fmt.Sprintf("%s -> %s", fc.PathPattern, fc.SELinuxType)
 		contexts2[key] = true
 	}
 
@@ -266,15 +266,12 @@ type ConflictAnalysis struct {
 // DetectConflicts analyzes a policy for potential conflicts
 func DetectConflicts(policy *models.SELinuxPolicy) *ConflictAnalysis {
 	analysis := &ConflictAnalysis{
-		AllowDenyConflicts:   make([]string, 0),
+		AllowDenyConflicts:   make([]string, 0), // Not used in simplified version
 		OverlappingRules:     make([]string, 0),
 		TypeMismatches:       make([]string, 0),
 		MissingDependencies:  make([]string, 0),
 		CircularDependencies: make([]string, 0),
 	}
-
-	// Check for allow/deny conflicts
-	analysis.AllowDenyConflicts = detectAllowDenyConflicts(policy)
 
 	// Check for overlapping rules
 	analysis.OverlappingRules = detectOverlappingRules(policy)
@@ -288,39 +285,10 @@ func DetectConflicts(policy *models.SELinuxPolicy) *ConflictAnalysis {
 	return analysis
 }
 
-// detectAllowDenyConflicts finds rules where the same access is both allowed and denied
+// detectAllowDenyConflicts - Removed in simplified version (no deny rules)
+// Deny rules are not supported in the MVP version
 func detectAllowDenyConflicts(policy *models.SELinuxPolicy) []string {
-	conflicts := make([]string, 0)
-
-	// Create map of deny rules for quick lookup
-	denyMap := make(map[string]map[string]bool) // key: source|target|class, value: permissions
-
-	for _, denyRule := range policy.DenyRules {
-		key := fmt.Sprintf("%s|%s|%s", denyRule.SourceType, denyRule.TargetType, denyRule.Class)
-		if denyMap[key] == nil {
-			denyMap[key] = make(map[string]bool)
-		}
-		for _, perm := range denyRule.Permissions {
-			denyMap[key][perm] = true
-		}
-	}
-
-	// Check allow rules against deny rules
-	for _, allowRule := range policy.Rules {
-		key := fmt.Sprintf("%s|%s|%s", allowRule.SourceType, allowRule.TargetType, allowRule.Class)
-
-		if denyPerms, exists := denyMap[key]; exists {
-			for _, perm := range allowRule.Permissions {
-				if denyPerms[perm] {
-					conflict := fmt.Sprintf("CONFLICT: %s %s:%s { %s } is both allowed and denied",
-						allowRule.SourceType, allowRule.TargetType, allowRule.Class, perm)
-					conflicts = append(conflicts, conflict)
-				}
-			}
-		}
-	}
-
-	return conflicts
+	return make([]string, 0)
 }
 
 // detectOverlappingRules finds rules that may have unintended overlaps
@@ -367,11 +335,7 @@ func detectMissingTypes(policy *models.SELinuxPolicy) []string {
 		usedTypes[rule.TargetType] = true
 	}
 
-	// Check types in deny rules
-	for _, rule := range policy.DenyRules {
-		usedTypes[rule.SourceType] = true
-		usedTypes[rule.TargetType] = true
-	}
+	// Deny rules removed in simplified version
 
 	// Check types in transitions
 	for _, trans := range policy.Transitions {

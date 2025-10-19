@@ -29,8 +29,7 @@ func (o *Optimizer) Optimize() error {
 	// Remove duplicate file contexts
 	o.deduplicateFileContexts()
 
-	// Remove duplicate deny rules
-	o.deduplicateDenyRules()
+	// Deny rules removed in simplified version
 
 	// Remove redundant rules (covered by more general rules)
 	o.removeRedundantRules()
@@ -153,50 +152,10 @@ func (o *Optimizer) deduplicateFileContexts() {
 	o.policy.FileContexts = deduplicated
 }
 
-// deduplicateDenyRules removes duplicate deny rules
+// deduplicateDenyRules - Removed in simplified version
+// Deny rules are not supported in MVP
 func (o *Optimizer) deduplicateDenyRules() {
-	if len(o.policy.DenyRules) == 0 {
-		return
-	}
-
-	// Create a map to group deny rules
-	ruleMap := make(map[string]*models.DenyRule)
-
-	for _, rule := range o.policy.DenyRules {
-		key := rule.SourceType + "|" + rule.TargetType + "|" + rule.Class
-
-		if existing, ok := ruleMap[key]; ok {
-			// Merge permissions
-			existing.Permissions = append(existing.Permissions, rule.Permissions...)
-		} else {
-			// Create a copy of the rule
-			ruleCopy := rule
-			ruleMap[key] = &ruleCopy
-		}
-	}
-
-	// Convert map back to slice
-	deduplicated := make([]models.DenyRule, 0, len(ruleMap))
-	for _, rule := range ruleMap {
-		// Deduplicate permissions
-		rule.Permissions = uniqueStringSlice(rule.Permissions)
-		// Sort permissions for consistent output
-		sort.Strings(rule.Permissions)
-		deduplicated = append(deduplicated, *rule)
-	}
-
-	// Sort deny rules for consistent output
-	sort.Slice(deduplicated, func(i, j int) bool {
-		if deduplicated[i].SourceType != deduplicated[j].SourceType {
-			return deduplicated[i].SourceType < deduplicated[j].SourceType
-		}
-		if deduplicated[i].TargetType != deduplicated[j].TargetType {
-			return deduplicated[i].TargetType < deduplicated[j].TargetType
-		}
-		return deduplicated[i].Class < deduplicated[j].Class
-	})
-
-	o.policy.DenyRules = deduplicated
+	// No-op: deny rules not supported
 }
 
 // uniqueStringSlice removes duplicates from a string slice
@@ -235,8 +194,8 @@ func (o *Optimizer) GetStatistics(originalPolicy *models.SELinuxPolicy) Optimiza
 		OptimizedTypeCount:     len(o.policy.Types),
 		OriginalContextCount:   len(originalPolicy.FileContexts),
 		OptimizedContextCount:  len(o.policy.FileContexts),
-		OriginalDenyRuleCount:  len(originalPolicy.DenyRules),
-		OptimizedDenyRuleCount: len(o.policy.DenyRules),
+		OriginalDenyRuleCount:  0, // Deny rules not supported in MVP
+		OptimizedDenyRuleCount: 0, // Deny rules not supported in MVP
 	}
 }
 
@@ -299,10 +258,7 @@ func (o *Optimizer) removeUnusedTypes() {
 		usedTypes[rule.TargetType] = true
 	}
 
-	for _, rule := range o.policy.DenyRules {
-		usedTypes[rule.SourceType] = true
-		usedTypes[rule.TargetType] = true
-	}
+	// Deny rules removed in simplified version
 
 	for _, trans := range o.policy.Transitions {
 		usedTypes[trans.SourceType] = true
